@@ -1,0 +1,15 @@
+*.bak
+*.json
+figures/
+images/
+a_mesh/
+b_mesh/
+precice*/
+out/
+mapped/
+input_mesh.vtu
+
+*.pdf
+archives/
+*.log
+checks/

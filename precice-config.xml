@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<precice-configuration>
+
+  <log>
+    <sink type="file" output="debug.log" filter="" format='%TimeStamp(format="%H:%M:%S.%f")%|%Participant%|%Rank%|%Module%|l%Line%|%Function%|%Severity%%Message%' />
+  </log>
+
+  <profiling flush-every="50" directory="." mode="all" synchronize="true" />
+
+    <!-- Data fields that are exchanged between the solvers -->
+    <data:scalar name="Data" />
+
+    <!-- A common mesh that uses these data fields -->
+    <mesh name="A-Mesh" dimensions="3">
+      <use-data name="Data" />
+    </mesh>
+
+    <mesh name="B-Mesh" dimensions="3">
+      <use-data name="Data" />
+    </mesh>
+
+    <m2n:sockets acceptor="A" connector="B" exchange-directory="." network="ib0"/>
+
+    <participant name="A">
+      <provide-mesh name="A-Mesh" />
+      <write-data name="Data" mesh="A-Mesh" />
+      <receive-mesh name="B-Mesh" from="B" />
+      <mapping:nearest-neighbor constraint="conservative" direction="write" from="A-Mesh" to="B-Mesh" />
+    </participant>
+
+    <participant name="B">
+      <provide-mesh name="B-Mesh" />
+      <read-data name="Data" mesh="B-Mesh" />
+      <receive-mesh name="A-Mesh" from="A" />
+      <mapping:nearest-neighbor constraint="consistent" direction="read" from="A-Mesh" to="B-Mesh" />
+    </participant>
+
+    <coupling-scheme:serial-explicit>
+      <participants first="A" second="B" />
+      <max-time value="1.0" />
+      <time-window-size value="1" />
+      <exchange data="Data" mesh="A-Mesh" from="A" to="B" substeps="false" />
+      <exchange data="Data" mesh="B-Mesh" from="B" to="A" />
+    </coupling-scheme:serial-explicit>
+
+</precice-configuration>
