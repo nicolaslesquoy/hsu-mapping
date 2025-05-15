@@ -8,7 +8,7 @@ precice*/
 out/
 mapped/
 input_mesh.vtu
-
+result*.vtu
 *.pdf
 archives/
 *.log
