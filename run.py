@@ -53,10 +53,7 @@ def ackley(x: tuple) -> float:
             1
             / len(x)
             * sum(
-                [
-                    np.cos(2 * PI * (scale * (x[i] - CENTER[i])))
-                    for i in range(len(x))
-                ]
+                [np.cos(2 * PI * (scale * (x[i] - CENTER[i]))) for i in range(len(x))]
             )
         )
         + np.exp(1)
@@ -76,14 +73,19 @@ def rosenbrock(x: tuple) -> float:
         ]
     )
 
+
 def rastigrin(x: tuple) -> float:
     scale = 10
     PI = 3.14159
     return sum(
         [
-            ((scale*(x[i] - CENTER[i]))**2 - 10*np.cos(2*PI*scale*(x[i] - CENTER[i]))) for i in range(len(x))
+            (
+                (scale * (x[i] - CENTER[i])) ** 2
+                - 10 * np.cos(2 * PI * scale * (x[i] - CENTER[i]))
+            )
+            for i in range(len(x))
         ]
-    ) - (scale*(x[0] - CENTER[0]))*(scale*(x[2] - CENTER[2]))
+    ) - (scale * (x[0] - CENTER[0])) * (scale * (x[2] - CENTER[2]))
 
 
 def eggholder(x: tuple) -> float:
@@ -118,17 +120,23 @@ def eggholder(x: tuple) -> float:
 
 ## Constants, paths and file names
 PATH_TO_MESHES = pathlib.Path("./meshes")
-STRUCTURE_MESH_NAME = "fluid_nodes_fastest_64.vtu"
-FLUID_NODES_MESH_NAME = "fluid_nodes_fastest_128.vtu"
-FLUID_CENTERS_MESH_NAME = "fluid_centers_fastest_64.vtu"
-GLOBAL_INPUT_MESH = STRUCTURE_MESH_NAME
+PATH_TO_OUT = pathlib.Path("./out")
+# STRUCTURE_MESH_NAME = "fluid_nodes_fastest_64.vtu"
+# FLUID_NODES_MESH_NAME = "fluid_nodes_fastest_128.vtu"
+# FLUID_CENTERS_MESH_NAME = "fluid_centers_fastest_64.vtu"
+STRUCTURE_MESH_NAME = "0_01.vtk"
+FLUID_NODES_MESH_NAME = "0_02.vtk"
+FLUID_CENTERS_MESH_NAME = "0_02.vtk"
+assert (PATH_TO_MESHES / STRUCTURE_MESH_NAME).exists()
+GLOBAL_INPUT_MESH = FLUID_NODES_MESH_NAME
 FUNCTION = rastigrin
 MAPPING = "NN"
-PATH_TO_OUT = pathlib.Path("./out")
+BLADE = "YES"
 MODIFIER = (
     "fc_to_sn"
-    + f"_s{STRUCTURE_MESH_NAME.split('.')[0].split('_')[-1]}_{FUNCTION.__name__}_{MAPPING}"
+    + f"_s{STRUCTURE_MESH_NAME.split('.')[0].split('_')[-1]}_{FUNCTION.__name__}_{MAPPING}_B{BLADE}"
 )
+ENABLE_GRADIENT = True
 CENTER = (0.5, 0.0, 0.5)
 p = 1 / 2.54
 
@@ -231,19 +239,24 @@ def plot(n: int, func, do_scaling: bool = True):
     values = evaluate(func, grid, do_scaling=True, minimum=m, maximum=M)
     plot_contour_and_surface(func.__name__, values, grid, levels=5)
 
+
 def compute_integral(x: np.array, y: np.array, values: np.array):
     xi, yi = np.meshgrid(np.unique(x), np.unique(y))
     points = np.column_stack((x, y))
-    grid_values = griddata(points, values, (xi, yi), method='linear')
-    return np.trapz(np.trapz(grid_values, xi[0]), yi[:,0])
+    grid_values = griddata(points, values, (xi, yi), method="linear")
+    return np.trapz(np.trapz(grid_values, xi[0]), yi[:, 0])
 
 
-points = read_vtu(str(PATH_TO_MESHES / GLOBAL_INPUT_MESH))
-DIMENSIONS = (np.max(points[:, 0]), np.max(points[:, 1]), np.max(points[:, 2]))
+if BLADE == "YES":
+    DIMENSIONS = (1, 0, 1)
+else:
+    points = read_vtu(str(PATH_TO_MESHES / GLOBAL_INPUT_MESH))
+    DIMENSIONS = (np.max(points[:, 0]), np.max(points[:, 1]), np.max(points[:, 2]))
 # SIZE = points[:, 0].shape[0]
 SIZE = 100
 
 # plot(100, rastigrin, do_scaling=True)
+
 
 class Run:
     # Class constants
@@ -339,7 +352,7 @@ class Run:
                 minimum,
                 maximum,
                 to_string_mode=True,
-                f=f"(({SCALE}*(x-{CENTER[0]}))^2-10*cos(2*{PI}*{SCALE}*(x-{CENTER[0]})))+(({SCALE}*(y-{CENTER[1]}))^2-10*cos(2*{PI}*{SCALE}*(y-{CENTER[1]})))+(({SCALE}*(z-{CENTER[2]}))^2-10*cos(2*{PI}*{SCALE}*(z-{CENTER[2]})))-({SCALE}*(x-{CENTER[0]}))*({SCALE}*(z-{CENTER[2]}))"
+                f=f"(({SCALE}*(x-{CENTER[0]}))^2-10*cos(2*{PI}*{SCALE}*(x-{CENTER[0]})))+(({SCALE}*(y-{CENTER[1]}))^2-10*cos(2*{PI}*{SCALE}*(y-{CENTER[1]})))+(({SCALE}*(z-{CENTER[2]}))^2-10*cos(2*{PI}*{SCALE}*(z-{CENTER[2]})))-({SCALE}*(x-{CENTER[0]}))*({SCALE}*(z-{CENTER[2]}))",
             )
         else:
             raise ValueError("Unknown function.")
@@ -372,7 +385,10 @@ class Run:
                 print(e)
 
     def evaluate(self, path_to_mesh: pathlib.Path) -> None:
-        cmd = f'precice-aste-evaluate -m {path_to_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --gradient --log DEBUG'
+        if ENABLE_GRADIENT:
+            cmd = f'precice-aste-evaluate -m {path_to_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --gradient --log DEBUG'
+        else:
+            cmd = f'precice-aste-evaluate -m {path_to_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --gradient --log DEBUG'
         self._run_command(cmd)
 
     def partition(
@@ -513,7 +529,7 @@ class Process:
             linfty_global,
             rmse,
             integral_in,
-            integral_out
+            integral_out,
         )
 
     def read_stats(self) -> "dict[str, float]":
@@ -532,7 +548,7 @@ class Process:
             linfty,
             rmse,
             integral_in,
-            integral_out
+            integral_out,
         ) = self.compute_error_metrics(func)
         print(f"L_infty={linfty}, RMSE(global)={rmse}")
         print(integral_in, integral_out)
