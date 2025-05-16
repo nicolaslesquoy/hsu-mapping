@@ -13,9 +13,6 @@ def swap(i: int, j: int, l: list) -> None:
     l[j] = e1
 
 
-print(11 - (11 // 2 + 1))
-
-
 def load(path_to_mesh: pathlib.Path):
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(str(path_to_mesh))  # Convert Path to string
@@ -94,3 +91,31 @@ def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
     writer.SetInputData(new_grid)
     writer.Write()
     print(f"Mesh written to {filename}")
+
+
+
+def main():
+    # Input and output paths
+    input_mesh = pathlib.Path("input.vtu")
+    output_mesh = pathlib.Path("input_modified.vtu")
+
+    # Load the mesh
+    points, original_grid = load(input_mesh)
+    
+    # Modify point coordinates
+    modify(points)
+    
+    # Write modified mesh
+    write(points, original_grid, str(output_mesh))
+
+def plot(path_to_file: pathlib.Path):
+    points, _ = load(path_to_file)
+    points = np.array(points)
+    plt.scatter(points[:,0], points[:,2])
+    plt.savefig(f"{path_to_file.name}.png")
+    plt.close()
+
+if __name__ == "__main__":
+    main()
+    plot(pathlib.Path("input.vtu"))
+    plot(pathlib.Path("input_modified.vtu"))
