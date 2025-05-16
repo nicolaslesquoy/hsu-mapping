@@ -16,3 +16,5 @@ checks/
 *.vtk
 blade/
 input.vtu
+*.png
+input_modified.vtu
