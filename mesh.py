@@ -25,36 +25,34 @@ def load(path_to_mesh: pathlib.Path):
         extract.append([x, y, z, i])
     return extract, ugrid  # Return both points and original grid
 
+
 def filter_points(points, coordinate, target):
     coord_index = {"x": 0, "y": 1, "z": 2}[coordinate]
-    return [p for p in points if p[coord_index] == target]
+    return [p for p in points if abs(p[coord_index] - target) < 1e-6]
 
 
-def get_column(points, x_val):
-    return sorted([p for p in points if p[0] == x_val], key=lambda p: p[2])
-
-
-def modify(points: list):
-    bottom = filter_points(points, coordinate="z", target=0)
-    for i in range(1, len(bottom)):
-        column_pos = bottom[i][0]
-        # Get indices of points in this column
-        column_indices = [idx for idx, p in enumerate(points) if p[0] == column_pos]
-        column = [points[idx] for idx in column_indices]
-        column.sort(key=lambda p: p[2])  # Sort by z coordinate
-        
-        n = len(column)
+def transform(points: list, reference: list, coordinate: str):
+    # coord_index = {"x": 0, "y": 1, "z": 2}[coordinate]
+    running_coord = {"x": 0, "y": 1, "z": 2}[coordinate]
+    print(running_coord)
+    for i in range(len(reference)):
+        pos = reference[i][running_coord]
+        indices = [
+            point[3] for point in points if abs(point[running_coord] - pos) < 1e-6
+        ]
+        collection = [points[idx] for idx in indices]
+        # print(collection[:6])
+        collection.sort(key=lambda p: p[2])
+        n = len(collection)
         if n < 2:
             continue
-
-        z0 = column[0][2]
-
+        x0 = collection[0][running_coord]
+        # print(x0)
         if n % 2 == 0:
             middle = n // 2 - 1
         else:
             middle = n // 2
-
-        L = column[-middle - 1][2] - z0
+        L = collection[-middle - 1][2] - x0
         s = 1.2
 
         # Avoid division by zero or negative power issues
@@ -67,21 +65,45 @@ def modify(points: list):
 
         dx = L * (1 - s) / denominator
 
-        # Update z coordinates directly in the points list
-        for j in range(1, len(column) - middle):
-            new_z = z0 + dx * s**j
-            points[column[j][3]][2] = new_z  # Update using original point ID
-    
+        for j in range(1, len(collection) - middle):
+            collection[j][running_coord] = x0 + dx * s**j
+
+        collection = list(reversed(collection))
+
+        for j in range(1, len(collection) - middle):
+            collection[j][running_coord] = x0 + dx * s**j
+
+        collection = list(reversed(collection))
+
+        # Update the points
+        for j in range(1, len(collection) - 1):
+            points[collection[j][3]][running_coord] = collection[j][running_coord]
+
+
+def modify(points: list):
+    target_x = min([p[0] for p in points])
+    # target_z = min([p[2] for p in points])
+    # print(target_x)
+    reference_x = filter_points(points, coordinate="x", target=target_x)
+    # print(reference_x)
+    # reference_z = filter_points(points, coordinate="z", target=target_z)
+
+    transform(points, reference=reference_x, coordinate="z")
+    # transform(points, reference=reference_z, coordinate="x")
+
+
 def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
     # Create a deep copy of the original grid to preserve all data
     new_grid = vtk.vtkUnstructuredGrid()
     new_grid.DeepCopy(original_grid)
-    
+
     # Only modify the points
     new_points = vtk.vtkPoints()
     for point in points:
-        new_points.InsertPoint(point[3], point[0], point[1], point[2])  # Use original ID
-    
+        new_points.InsertPoint(
+            point[3], point[0], point[1], point[2]
+        )  # Use original ID
+
     # Set the modified points in the grid
     new_grid.SetPoints(new_points)
 
@@ -93,7 +115,6 @@ def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
     print(f"Mesh written to {filename}")
 
 
-
 def main():
     # Input and output paths
     input_mesh = pathlib.Path("input.vtu")
@@ -101,19 +122,21 @@ def main():
 
     # Load the mesh
     points, original_grid = load(input_mesh)
-    
+
     # Modify point coordinates
     modify(points)
-    
+
     # Write modified mesh
     write(points, original_grid, str(output_mesh))
+
 
 def plot(path_to_file: pathlib.Path):
     points, _ = load(path_to_file)
     points = np.array(points)
-    plt.scatter(points[:,0], points[:,2])
-    plt.savefig(f"{path_to_file.name}.png")
+    plt.scatter(points[:, 0], points[:, 2])
+    plt.savefig(f"{path_to_file.stem}.png")
     plt.close()
+
 
 if __name__ == "__main__":
     main()
