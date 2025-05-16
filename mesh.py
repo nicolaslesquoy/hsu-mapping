@@ -32,7 +32,6 @@ def filter_points(points, coordinate, target):
 
 
 def transform(points: list, reference: list, coordinate: str):
-    # coord_index = {"x": 0, "y": 1, "z": 2}[coordinate]
     running_coord = {"x": 0, "y": 1, "z": 2}[coordinate]
     print(running_coord)
     for i in range(len(reference)):
@@ -41,13 +40,12 @@ def transform(points: list, reference: list, coordinate: str):
             point[3] for point in points if abs(point[running_coord] - pos) < 1e-6
         ]
         collection = [points[idx] for idx in indices]
-        # print(collection[:6])
         collection.sort(key=lambda p: p[2])
         n = len(collection)
         if n < 2:
             continue
         x0 = collection[0][running_coord]
-        # print(x0)
+        
         if n % 2 == 0:
             middle = n // 2 - 1
         else:
@@ -55,7 +53,6 @@ def transform(points: list, reference: list, coordinate: str):
         L = collection[-middle - 1][2] - x0
         s = 1.2
 
-        # Avoid division by zero or negative power issues
         if middle <= 1 or s == 1:
             continue
 
@@ -65,19 +62,15 @@ def transform(points: list, reference: list, coordinate: str):
 
         dx = L * (1 - s) / denominator
 
+        # Direct modification of points list using indices
         for j in range(1, len(collection) - middle):
-            collection[j][running_coord] = x0 + dx * s**j
+            idx = collection[j][3]  # Get original point index
+            points[idx][running_coord] = x0 + dx * s**j
 
-        collection = list(reversed(collection))
-
+        # Second pass - reversed
         for j in range(1, len(collection) - middle):
-            collection[j][running_coord] = x0 + dx * s**j
-
-        collection = list(reversed(collection))
-
-        # Update the points
-        for j in range(1, len(collection) - 1):
-            points[collection[j][3]][running_coord] = collection[j][running_coord]
+            idx = collection[len(collection)-j-1][3]  # Get index from end
+            points[idx][running_coord] = x0 + dx * s**j
 
 
 def modify(points: list):
