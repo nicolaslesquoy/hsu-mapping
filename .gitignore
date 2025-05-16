@@ -15,3 +15,4 @@ archives/
 checks/
 *.vtk
 blade/
+input.vtu

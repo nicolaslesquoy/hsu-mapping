@@ -2,7 +2,6 @@
 import pathlib
 import subprocess
 import json
-import warnings
 
 ## Third-party librairies
 import vtk
@@ -11,15 +10,13 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from matplotlib.collections import LineCollection
-from matplotlib.colors import Normalize
-from matplotlib.ticker import MaxNLocator
 
 from scipy.interpolate import griddata
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## Interpolation test functions
 # * With rescale + centering on CENTER
-
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 def sphere(x: tuple) -> float:
     return sum([(x[i] - CENTER[i]) ** 2 for i in range(len(x))])
@@ -117,8 +114,9 @@ def eggholder(x: tuple) -> float:
         ]
     )
 
-
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## Constants, paths and file names
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 PATH_TO_MESHES = pathlib.Path("./meshes")
 PATH_TO_OUT = pathlib.Path("./out")
 # STRUCTURE_MESH_NAME = "fluid_nodes_fastest_64.vtu"
@@ -127,20 +125,24 @@ PATH_TO_OUT = pathlib.Path("./out")
 STRUCTURE_MESH_NAME = "0_01.vtk"
 FLUID_NODES_MESH_NAME = "0_02.vtk"
 FLUID_CENTERS_MESH_NAME = "0_02.vtk"
-assert (PATH_TO_MESHES / STRUCTURE_MESH_NAME).exists()
 GLOBAL_INPUT_MESH = FLUID_NODES_MESH_NAME
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+## Simulation parameters
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 FUNCTION = rastigrin
 MAPPING = "NN"
-BLADE = "YES"
+BLADE = True if "vtk" in STRUCTURE_MESH_NAME else False
+CENTER = (0.5, 0.0, 0.5)
+ENABLE_GRADIENT = True if function.__name__ in ["rosenbrock", "sphere", "rastigrin"] else False # Enable gradient option in precice-aste-evalute (rastigrin, sphere, rosenbrock only)
 MODIFIER = (
     "fc_to_sn"
     + f"_s{STRUCTURE_MESH_NAME.split('.')[0].split('_')[-1]}_{FUNCTION.__name__}_{MAPPING}_B{BLADE}"
 )
-ENABLE_GRADIENT = True
-CENTER = (0.5, 0.0, 0.5)
-p = 1 / 2.54
+p = 1 / 2.54 # Figsize parameter for matplotlib
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## Parameters for ASTE
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 DEFAULT_NB_PROCS = 2
 DEFAULT_DATA_NAME = "InputData"
 DEFAULT_INTERPOLATED_DATA_NAME = "InterpolatedData"
@@ -628,8 +630,8 @@ if __name__ == "__main__":
     test.join()
     test.stats()
     test.save_results()
-    test_plot = Process()
-    test_plot.plot_data(FUNCTION)
+    # test_plot = Process()
+    # test_plot.plot_data(FUNCTION)
     # print(find_extrema(eggholder))
     # compares_nodes(pathlib.Path("./meshes/fluid_nodes_fastest_64.vtu"), pathlib.Path("./checks/FSI_interface_mesh_for_preCICE_A-patch_nodes_proc_0001.dat"))
     # print(np.max(plot_on_mesh(pathlib.Path("./meshes/structure_nodes_calculix_32.vtu"),drop_wave)))
