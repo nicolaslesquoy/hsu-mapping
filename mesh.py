@@ -18,7 +18,7 @@ print(11 - (11 // 2 + 1))
 
 def load(path_to_mesh: pathlib.Path):
     reader = vtk.vtkXMLUnstructuredGridReader()
-    reader.SetFileName("input.vtu")
+    reader.SetFileName(str(path_to_mesh))  # Convert Path to string
     reader.Update()
     ugrid = reader.GetOutput()
     points = ugrid.GetPoints()
@@ -26,7 +26,7 @@ def load(path_to_mesh: pathlib.Path):
     for i in range(points.GetNumberOfPoints()):
         x, y, z = points.GetPoint(i)
         extract.append([x, y, z, i])
-    return extract
+    return extract, ugrid  # Return both points and original grid
 
 def filter_points(points, coordinate, target):
     coord_index = {"x": 0, "y": 1, "z": 2}[coordinate]
@@ -75,8 +75,22 @@ def modify(points: list):
             index = column[i][3]
             points[index][2] = column[i][2]
     
-def write(points: list, filename: str):
+def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
+    # Create a deep copy of the original grid to preserve all data
+    new_grid = vtk.vtkUnstructuredGrid()
+    new_grid.DeepCopy(original_grid)
+    
+    # Only modify the points
+    new_points = vtk.vtkPoints()
+    for point in points:
+        new_points.InsertPoint(point[3], point[0], point[1], point[2])  # Use original ID
+    
+    # Set the modified points in the grid
+    new_grid.SetPoints(new_points)
+
+    # Write the modified mesh to a file
     writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName("output.vtu")
-    writer.SetInputData(points)
+    writer.SetFileName(filename)
+    writer.SetInputData(new_grid)
     writer.Write()
+    print(f"Mesh written to {filename}")
