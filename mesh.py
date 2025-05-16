@@ -38,9 +38,12 @@ def modify(points: list):
     bottom = filter_points(points, coordinate="z", target=0)
     for i in range(1, len(bottom)):
         column_pos = bottom[i][0]
-        column = get_column(points, column_pos)
+        # Get indices of points in this column
+        column_indices = [idx for idx, p in enumerate(points) if p[0] == column_pos]
+        column = [points[idx] for idx in column_indices]
+        column.sort(key=lambda p: p[2])  # Sort by z coordinate
+        
         n = len(column)
-
         if n < 2:
             continue
 
@@ -51,7 +54,6 @@ def modify(points: list):
         else:
             middle = n // 2
 
-        zlast = column[middle][2]
         L = column[-middle - 1][2] - z0
         s = 1.2
 
@@ -65,12 +67,10 @@ def modify(points: list):
 
         dx = L * (1 - s) / denominator
 
+        # Update z coordinates directly in the points list
         for j in range(1, len(column) - middle):
-            column[j][2] = z0 + dx * s**j
-
-        for i in range(len(column)):
-            index = column[i][3]
-            points[index][2] = column[i][2]
+            new_z = z0 + dx * s**j
+            points[column[j][3]][2] = new_z  # Update using original point ID
     
 def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
     # Create a deep copy of the original grid to preserve all data
