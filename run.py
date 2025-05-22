@@ -3,6 +3,7 @@ import pathlib
 import subprocess
 import shutil
 import json
+from typing import Optional
 
 ## Third-party librairies
 # * pip install -r requirements.txt
@@ -12,8 +13,8 @@ import numpy as np
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## FUNCTIONS
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-#? Center of the computational domain for lid-driven cavity
-CENTER = (0.5, 0.0, 0.5) 
+# ? Center of the computational domain for lid-driven cavity
+CENTER = (0.5, 0.0, 0.5)
 
 
 def sphere(x: tuple) -> float:
@@ -24,7 +25,10 @@ def sphere(x: tuple) -> float:
 
 
 def drop_wave(x: tuple) -> float:
-    scale = 1.5
+    """
+    This function computes the 'drop wave' test function with centering and rescaling.
+    """
+    scale = 1.5  # Arbitrary scaling factor
     return 1 - (
         1
         + np.cos(
@@ -35,7 +39,10 @@ def drop_wave(x: tuple) -> float:
 
 
 def ackley(x: tuple) -> float:
-    scale = 5
+    """
+    This function computes Ackley's test function with centering and rescaling.
+    """
+    scale = 5  # Arbitrary scaling factor
     PI = 3.14159
     return (
         -20
@@ -60,6 +67,9 @@ def ackley(x: tuple) -> float:
 
 
 def rosenbrock(x: tuple) -> float:
+    """
+    This function computes the Rosenbrock test function with centering (no rescaling needed).
+    """
     scale = 1
     return sum(
         [
@@ -72,22 +82,11 @@ def rosenbrock(x: tuple) -> float:
     )
 
 
-def rastrigin_mod(x: tuple) -> float:
-    scale = 10
-    PI = 3.14159
-    return sum(
-        [
-            (
-                (scale * (x[i] - CENTER[i])) ** 2
-                - 10 * np.cos(2 * PI * scale * (x[i] - CENTER[i]))
-            )
-            for i in range(len(x))
-        ]
-    ) - (scale * (x[0] - CENTER[0])) * (scale * (x[2] - CENTER[2]))
-
-
 def eggholder(x: tuple) -> float:
-    scale = 1024
+    """
+    This function computes the Eggholder test function with centering and rescaling.
+    """
+    scale = 1024  # See Ariguib et al. (2022 - Master thesis)
     return sum(
         [
             -scale
@@ -114,6 +113,24 @@ def eggholder(x: tuple) -> float:
             for i in range(len(x) - 1)
         ]
     )
+
+
+def rastrigin_mod(x: tuple) -> float:
+    """
+    This function computes the modified Rastrigin test function with centering and rescaling.
+    Constants were removed and a non-linear term was added to the function.
+    """
+    scale = 10
+    PI = 3.14159
+    return sum(
+        [
+            (
+                (scale * (x[i] - CENTER[i])) ** 2
+                - 10 * np.cos(2 * PI * scale * (x[i] - CENTER[i]))
+            )
+            for i in range(len(x))
+        ]
+    ) - (scale * (x[0] - CENTER[0])) * (scale * (x[2] - CENTER[2]))
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -146,17 +163,13 @@ def is_blade(path_to_file: pathlib.Path) -> bool:
     return True if "vtk" in path_to_file.name else False
 
 
-def parse_parameters(method: str, parameters: dict) -> list:
+def parse_parameters(method: str, parameters: dict) -> tuple[str, float] | None:
     if "rbf" not in method:
         return None
     else:
         basis_function: str = parameters["basis-function"]
         support_radius: float = float(parameters["support-radius"])
-        if "pum" in method:
-            vertices_per_cluster: int = int(parameters["vertices-per-cluster"])
-        else:
-            vertices_per_cluster = None
-    return [basis_function, support_radius, vertices_per_cluster]
+    return (basis_function, support_radius)
 
 
 class ConfigParser:
@@ -167,7 +180,7 @@ class ConfigParser:
     def __init__(self, path_to_config: pathlib.Path) -> None:
         assert path_to_config.exists(), "Configuration file not found."
         config = read_json(path_to_config)
-        self.path_to_config = path_to_config
+        self.path_to_config: pathlib.Path = path_to_config
         self.input_mesh: pathlib.Path = PATH_TO_MESHES / config["input-mesh"]
         assert self.input_mesh.exists(), "Input mesh not found."
         self.output_mesh: pathlib.Path = PATH_TO_MESHES / config["output-mesh"]
@@ -183,7 +196,7 @@ class ConfigParser:
             "drop_wave",
         ], "Unsupported function."
         self.mapping_method: str = config["mapping-method"]
-        self.additional_parameters: list = parse_parameters(
+        self.additional_parameters: tuple[str, float] | None = parse_parameters(
             self.mapping_method, config["additional-config"]
         )
         self.number_of_processes: int = config["nb-procs"]
@@ -214,7 +227,7 @@ class XMLEditor:
     def __init__(self, config: "ConfigParser") -> None:
         self.mapping_method: str = config.mapping_method
         if config.additional_parameters is not None:
-            self.additional_parameters: list = config.additional_parameters
+            self.additional_parameters: tuple[str, float] = config.additional_parameters
         if "rbf" in self.mapping_method:
             self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf.txt"
         else:
@@ -247,7 +260,7 @@ class XMLEditor:
 
 
 def read_vtu(path_to_vtu: pathlib.Path):
-    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader = vtk.vtkXMLUnstructuredGridReader()  # type: ignore
     reader.SetFileName(str(path_to_vtu))
     reader.Update()
     mesh = reader.GetOutput()
@@ -258,7 +271,7 @@ def read_vtu(path_to_vtu: pathlib.Path):
     return point_coords
 
 
-def find_min_max(func, grid: np.array):
+def find_min_max(func, grid: np.ndarray):
     values = np.array([func(tuple(point)) for point in grid])
     minimum = np.min(values)
     maximum = np.max(values)
@@ -266,16 +279,21 @@ def find_min_max(func, grid: np.array):
 
 
 def linear_scaling(
-    func, x: tuple, m: float, M: float, to_string_mode: bool = False, f: str = None
+    func,
+    x: tuple,
+    m: float,
+    M: float,
+    to_string_mode: bool = False,
+    f: Optional[str] = None,
 ):
     offset = 1
-    if to_string_mode and f != None:
+    if to_string_mode and f is not None:
         return f"({f}-{m})/({M}-{m})+{offset}"
     else:
         return (func(tuple(x)) - m) / (M - m) + offset
 
 
-def generate_grid(n: int, xmax: float = 1.0, ymax: float = 1.0) -> np.array:
+def generate_grid(n: int, xmax: float = 1.0, ymax: float = 1.0) -> np.ndarray:
     x = np.linspace(0, xmax, n)
     z = np.linspace(0, ymax, n)
     X, Z = np.meshgrid(x, z, indexing="xy")
@@ -285,12 +303,12 @@ def generate_grid(n: int, xmax: float = 1.0, ymax: float = 1.0) -> np.array:
 
 def evaluate(
     f,
-    grid: np.array,
+    grid: np.ndarray,
     do_scaling: bool = True,
-    minimum: float = None,
-    maximum: float = None,
-) -> np.array:
-    if do_scaling:
+    minimum: Optional[float] = None,
+    maximum: Optional[float] = None,
+) -> np.ndarray:
+    if do_scaling and minimum is not None and maximum is not None:
         return np.array(
             [linear_scaling(f, tuple(point), minimum, maximum) for point in grid]
         )
@@ -316,7 +334,7 @@ class Run:
         self,
         config: "ConfigParser",
         enable_gradient: bool = False,
-        output_name: str = None,
+        output_name: Optional[str] = None,
     ):
         self.parameters: "ConfigParser" = config
         self.nb_process = config.number_of_processes
@@ -326,7 +344,7 @@ class Run:
             minimum, maximum = find_min_max(sphere, generate_grid(self.SIZE))
             self.evaluation_function = linear_scaling(
                 sphere,
-                None,
+                (0, 0, 0),
                 minimum,
                 maximum,
                 to_string_mode=True,
@@ -337,7 +355,7 @@ class Run:
             minimum, maximum = find_min_max(drop_wave, generate_grid(self.SIZE))
             self.evaluation_function = linear_scaling(
                 drop_wave,
-                None,
+                (0, 0, 0),
                 minimum,
                 maximum,
                 to_string_mode=True,
@@ -350,7 +368,7 @@ class Run:
             minimum, maximum = find_min_max(ackley, generate_grid(self.SIZE))
             self.evaluation_function = linear_scaling(
                 ackley,
-                None,
+                (0, 0, 0),
                 minimum,
                 maximum,
                 to_string_mode=True,
@@ -361,7 +379,7 @@ class Run:
             minimum, maximum = find_min_max(rosenbrock, generate_grid(self.SIZE))
             self.evaluation_function = linear_scaling(
                 rosenbrock,
-                None,
+                (0, 0, 0),
                 minimum,
                 maximum,
                 to_string_mode=True,
@@ -372,7 +390,7 @@ class Run:
             minimum, maximum = find_min_max(eggholder, generate_grid(self.SIZE))
             self.evaluation_function = linear_scaling(
                 eggholder,
-                None,
+                (0, 0, 0),
                 minimum,
                 maximum,
                 to_string_mode=True,
@@ -384,7 +402,7 @@ class Run:
             PI = 3.14159
             self.evaluation_function = linear_scaling(
                 rastrigin_mod,
-                None,
+                (0, 0, 0),
                 minimum,
                 maximum,
                 to_string_mode=True,
@@ -394,7 +412,7 @@ class Run:
             raise ValueError(f"Unknown function: {config.test_function}.")
         self.enable_gradient = enable_gradient
         self.output_name = (
-            output_name if output_name != None else self.DEFAULT_OUTPUT_MESH_NAME
+            output_name if output_name is not None else self.DEFAULT_OUTPUT_MESH_NAME
         )
 
     def __str__(self) -> str:

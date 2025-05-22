@@ -22,3 +22,6 @@ export/
 config.json
 *.tar.gz
 meshes/
+*.vtu
+.ruff_cache
+*.txt

@@ -1,21 +1,23 @@
-import vtk
 import pathlib
 
+import vtk
 import numpy as np
 import matplotlib.pyplot as plt
 
 PATH_TO_STRETCHED = pathlib.Path("./stretched")
+PATH_TO_MESHES = pathlib.Path("./meshes")
 
 
-def swap(i: int, j: int, l: list) -> None:
-    e1 = l[i]
-    e2 = l[j]
-    l[i] = e2
-    l[j] = e1
+# def swap(i: int, j: int, subject: list) -> None:
+#     e1 = subject[i]
+#     e2 = subject[j]
+#     subject[i] = e2
+#     subject[j] = e1
+#     return None
 
 
 def load(path_to_mesh: pathlib.Path):
-    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader = vtk.vtkXMLUnstructuredGridReader()  # type: ignore
     reader.SetFileName(str(path_to_mesh))  # Convert Path to string
     reader.Update()
     ugrid = reader.GetOutput()
@@ -24,109 +26,79 @@ def load(path_to_mesh: pathlib.Path):
     for i in range(points.GetNumberOfPoints()):
         x, y, z = points.GetPoint(i)
         extract.append([x, y, z, i])
-    return extract, ugrid  # Return both points and original grid
+    return extract, ugrid  # Return both points and original content
 
 
-def filter_points(points, coordinate, target):
+def filter_points(
+    points: list, coordinate: str, target: float, epsilon: float = 1e-6
+) -> list:
     coord_index = {"x": 0, "y": 1, "z": 2}[coordinate]
-    return [p for p in points if abs(p[coord_index] - target) < 1e-6]
+    return [p for p in points if abs(p[coord_index] - target) < epsilon]
 
-
-def modify(points: list):
-    # Process columns (vertical stretching)
-    bottom = filter_points(points, coordinate="z", target=0.015625)
+def modify(points: list) -> None:
+    bottom = filter_points(points, coordinate="z", target=min(p[2] for p in points))
+    left = filter_points(points, coordinate="x", target=min(p[0] for p in points))
+    middle_index = len(bottom) // 2
+    L = (max(p[0] for p in points) - min(p[0] for p in points)) / 2
+    s = 1.5
+    dx = L * (1 - s) / (1 - s**(middle_index - 1))
+    # Stretching vertically (z coordinate)
     for i in range(len(bottom)):
         column_pos = bottom[i][0]
-        # Get indices of points in this column
         column_indices = [
             point[3] for point in points if abs(point[0] - column_pos) < 1e-6
         ]
         column = [points[idx] for idx in column_indices]
         column.sort(key=lambda p: p[2])  # Sort by z coordinate
-
-        n = len(column)
-        if n < 2:
-            continue
-
-        is_odd = n % 2 != 0
-        middle = n // 2 if is_odd else n // 2 - 1
-
+        # Stretch lower half
         z0 = column[0][2]
-        zn = column[-1][2]
-        s = 1.5
-
-        # Avoid division by zero or negative power issues
-        if middle <= 1 or s == 1:
-            continue
-
-        # Lower half stretching
-        L_lower = column[middle][2] - z0
-        denominator_lower = 1 - s ** (middle - 1)
-        if denominator_lower != 0:
-            dx_lower = L_lower * (1 - s) / denominator_lower
-            for j in range(1, middle):
-                new_z = z0 + dx_lower * s**j
-                points[column[j][3]][2] = new_z
-
-        # Upper half stretching
-        L_upper = zn - column[middle][2]
-        start_idx = middle + 1 if is_odd else middle + 1
-        denominator_upper = 1 - s ** (n - start_idx - 1)
-        if denominator_upper != 0:
-            dx_upper = L_upper * (1 - s) / denominator_upper
-            for j in range(start_idx, n - 1):
-                new_z = zn - dx_upper * s ** (n - j - 1)
-                points[column[j][3]][2] = new_z
-
-    # Process rows (horizontal stretching)
-    left = filter_points(points, coordinate="x", target=min(p[0] for p in points))
-    for i in range(len(left)):
+        old_z = z0
+        for j in range(1, middle_index):
+            new_z = old_z + dx * s**(j - 1)
+            points[column[j][3]][2] = new_z
+            old_z = new_z
+        # Reverse column
+        column.reverse()
+        # Stretch upper half
+        zn = column[0][2]
+        old_z = zn
+        for j in range(1, middle_index):
+            new_z = old_z - dx * s**(j - 1)
+            points[column[j][3]][2] = new_z
+            old_z = new_z
+    # Stretching horizontally (x coordinate)
+    for i in range(1, len(left)):
         row_pos = left[i][2]
-        row_indices = [point[3] for point in points if abs(point[2] - row_pos) < 1e-6]
+        row_indices = [
+            point[3] for point in points if abs(point[2] - row_pos) < 1e-6
+        ]
         row = [points[idx] for idx in row_indices]
         row.sort(key=lambda p: p[0])
-
-        n = len(row)
-        if n < 2:
-            continue
-
-        is_odd = n % 2 != 0
-        middle = n // 2 if is_odd else n // 2 - 1
-
+        # Stretch left half
         x0 = row[0][0]
-        xn = row[-1][0]
-        s = 1.5
+        old_x = x0
+        for j in range(1, middle_index):
+            new_x = old_x + dx * s**(j - 1)
+            points[row[j][3]][0] = new_x
+            old_x = new_x
+        # Reverse row
+        row.reverse()
+        # Stretch right half
+        xn = row[0][0]
+        old_x = xn
+        for j in range(1, middle_index):
+            new_x = old_x - dx * s**(j - 1)
+            points[row[j][3]][0] = new_x
+            old_x = new_x
+    return None
 
-        if middle <= 1 or s == 1:
-            continue
-
-        # Left half stretching
-        L_left = row[middle][0] - x0
-        denominator_left = 1 - s ** (middle - 1)
-        if denominator_left != 0:
-            dx_left = L_left * (1 - s) / denominator_left
-            for j in range(1, middle):
-                new_x = x0 + dx_left * s**j
-                points[row[j][3]][0] = new_x
-
-        # Right half stretching
-        L_right = xn - row[middle][0]
-        start_idx = middle + 1 if is_odd else middle + 1
-        denominator_right = 1 - s ** (n - start_idx - 1)
-        if denominator_right != 0:
-            dx_right = L_right * (1 - s) / denominator_right
-            for j in range(start_idx, n - 1):
-                new_x = xn - dx_right * s ** (n - j - 1)
-                points[row[j][3]][0] = new_x
-
-
-def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
+def write(points: list, original_grid, filename: str):
     # Create a deep copy of the original grid to preserve all data
-    new_grid = vtk.vtkUnstructuredGrid()
+    new_grid = vtk.vtkUnstructuredGrid()  # type: ignore
     new_grid.DeepCopy(original_grid)
 
     # Only modify the points
-    new_points = vtk.vtkPoints()
+    new_points = vtk.vtkPoints()  # type: ignore
     for point in points:
         new_points.InsertPoint(
             point[3], point[0], point[1], point[2]
@@ -136,37 +108,29 @@ def write(points: list, original_grid: vtk.vtkUnstructuredGrid, filename: str):
     new_grid.SetPoints(new_points)
 
     # Write the modified mesh to a file
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(filename)
+    writer = vtk.vtkXMLUnstructuredGridWriter()  # type: ignore
+    writer.SetFileName(str(PATH_TO_STRETCHED / filename))
     writer.SetInputData(new_grid)
     writer.Write()
     print(f"Mesh written to {filename}")
 
 
-def main():
-    # Input and output paths
-    input_mesh = pathlib.Path("input.vtu")
-    output_mesh = pathlib.Path("input_modified.vtu")
-
-    # Load the mesh
-    points, original_grid = load(input_mesh)
-
-    # Modify point coordinates
+def process(path_to_mesh: pathlib.Path, filename: str) -> None:
+    points, original_grid = load(path_to_mesh)
     modify(points)
+    write(points, original_grid, filename)
+    return None
 
-    # Write modified mesh
-    write(points, original_grid, str(output_mesh))
-
-
-def plot(path_to_file: pathlib.Path):
+def plot(path_to_file: pathlib.Path) -> None:
+    # Plot mesh as a grid
     points, _ = load(path_to_file)
     points = np.array(points)
     plt.scatter(points[:, 0], points[:, 2])
-    plt.savefig(f"{path_to_file.name}.png")
+    plt.savefig(f"{path_to_file.stem}.png")
     plt.close()
 
-
 if __name__ == "__main__":
-    main()
-    plot(pathlib.Path("input.vtu"))
-    plot(pathlib.Path("input_modified.vtu"))
+    process(
+        PATH_TO_MESHES / "fluid_nodes_fastest_32.vtu", "fluid_nodes_fastest_32_stretched.vtu"
+    )
+    plot(PATH_TO_STRETCHED / "fluid_nodes_fastest_32_stretched.vtu")

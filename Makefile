@@ -13,8 +13,13 @@ mesh:
 test:
 	$(PYTHON) test.py
 
+lint:
+	ruff check *.py
+	@echo "Linting completed."
+
 format:
-	black *.py
+	ruff format *.py
+	@echo "Formatting completed."
 
 clean:
 	rm -rf a_mesh b_mesh mapped
