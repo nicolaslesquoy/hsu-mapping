@@ -10,6 +10,7 @@ from typing import Optional
 import vtk
 import numpy as np
 import matplotlib.pyplot as plt
+
 p = 1 / 2.54
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -532,23 +533,24 @@ class Run:
     def clean(self):
         self._run_command("make clean")
 
+
 class Process:
     SIZE = 100
     # Function mapping dictionary
     FUNCTION_MAP = {
-        'sphere': sphere,
-        'drop_wave': drop_wave,
-        'ackley': ackley,
-        'rosenbrock': rosenbrock,
-        'eggholder': eggholder,
-        'rastrigin_mod': rastrigin_mod
+        "sphere": sphere,
+        "drop_wave": drop_wave,
+        "ackley": ackley,
+        "rosenbrock": rosenbrock,
+        "eggholder": eggholder,
+        "rastrigin_mod": rastrigin_mod,
     }
 
     def __init__(
         self,
         input_csv_file: pathlib.Path,
         output_csv_file: pathlib.Path,
-        function_name: str
+        function_name: str,
     ) -> None:
         self.input_csv_file = input_csv_file
         self.output_csv_file = output_csv_file
@@ -573,9 +575,7 @@ class Process:
         x_in, y_in, z_in, values_in = self.read_csv(which="in")
         x_out, y_out, z_out, values_out = self.read_csv(which="out")
         n = x_out.size
-        minimum, maximum = find_min_max(
-            self.function, generate_grid(self.SIZE)
-        )
+        minimum, maximum = find_min_max(self.function, generate_grid(self.SIZE))
         predicted = np.array(
             [
                 linear_scaling(self.function, (x, y, z), minimum, maximum)
@@ -669,9 +669,7 @@ class Process:
 
         # Adjust layout for better appearance
         plt.tight_layout()
-        plt.savefig(
-            path_to_file, dpi=300, bbox_inches="tight"
-        )
+        plt.savefig(path_to_file, dpi=300, bbox_inches="tight")
         plt.close()
 
 
@@ -692,7 +690,7 @@ if __name__ == "__main__":
     process = Process(
         input_csv_file=PATH_TO_OUT / "results" / "input.csv",
         output_csv_file=PATH_TO_OUT / "results" / "output.csv",
-        function_name=test.test_function  # Pass the function name from config
+        function_name=test.test_function,  # Pass the function name from config
     )
     process.compute_error_metrics()
     process.plot_data(
