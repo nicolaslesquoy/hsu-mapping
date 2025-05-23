@@ -140,7 +140,20 @@ def rastrigin_mod(x: tuple) -> float:
 ## CONSTANTS
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 PATH_TO_MESHES = pathlib.Path("./meshes")
+assert PATH_TO_MESHES.exists(), "Mesh folder not found."
+if not PATH_TO_MESHES.exists():
+    PATH_TO_MESHES.mkdir(parents=True, exist_ok=True)
+    print(f"Mesh folder created: {PATH_TO_MESHES}")
+PATH_TO_STRETCHED = pathlib.Path("./stretched")
+assert PATH_TO_STRETCHED.exists(), "Stretched folder not found."
+if not PATH_TO_STRETCHED.exists():
+    PATH_TO_STRETCHED.mkdir(parents=True, exist_ok=True)
+    print(f"Stretched folder created: {PATH_TO_STRETCHED}")
 PATH_TO_OUT = pathlib.Path("./out")
+assert PATH_TO_OUT.exists(), "Output folder not found."
+if not PATH_TO_OUT.exists():
+    PATH_TO_OUT.mkdir(parents=True, exist_ok=True)
+    print(f"Output folder created: {PATH_TO_OUT}")
 PATH_TO_TEMPLATES = pathlib.Path("./templates")
 DEFAULT_NB_PROCS = 4
 DEFAULT_DATA_NAME = "InputData"
@@ -195,7 +208,7 @@ class ConfigParser:
             "ackley",
             "rosenbrock",
             "eggholder",
-            "rastrigin",
+            "rastrigin_mod",
             "drop_wave",
         ], "Unsupported function."
         self.mapping_method: str = config["mapping-method"]
@@ -476,7 +489,7 @@ class Run:
         cmd = f'precice-aste-evaluate -m {self.output_name} -f "{self.evaluation_function}" -d "Error" --diffdata "{DEFAULT_INTERPOLATED_DATA_NAME}" --diff --stats --log DEBUG'
         self._run_command(cmd)
 
-    def _vtu_to_csv(self, path_to_file: pathlib.Path, filename: str, data: str):
+    def _vtu_to_csv(self, path_to_file: pathlib.Path, data: str, path_to_output: str):
         reader = vtk.vtkXMLUnstructuredGridReader()  # type: ignore
         reader.SetFileName(path_to_file)
         reader.Update()
@@ -496,9 +509,7 @@ class Run:
         y = point_coords[:, 1]
         z = point_coords[:, 2]
         # Write to file
-        PATH_TO_OUT.mkdir(parents=True, exist_ok=True)
         output_array = np.column_stack((x, y, z, data_values))
-        path_to_output = str(PATH_TO_OUT / (filename + ".csv"))
         np.savetxt(
             path_to_output,
             output_array,
@@ -507,17 +518,15 @@ class Run:
             comments="",
         )
 
-    def save_results(self, folder_name: str):
-        # Read and process results
-        self._vtu_to_csv(self.DEFAULT_INPUT_MESH_NAME, "input", DEFAULT_DATA_NAME)
-        self._vtu_to_csv(
-            self.DEFAULT_OUTPUT_MESH_NAME, "output", DEFAULT_INTERPOLATED_DATA_NAME
-        )
+    def save_results(self, folder_name: str, save_csv: bool = True):
         path_to_folder = PATH_TO_OUT / folder_name
         path_to_folder.mkdir(parents=True, exist_ok=True)
-        # Move files to the folder
-        for file in PATH_TO_OUT.glob("*.csv"):
-            file.rename(path_to_folder / file.name)
+        # Read and process results
+        if save_csv:
+            self._vtu_to_csv(self.DEFAULT_INPUT_MESH_NAME, DEFAULT_DATA_NAME, str(path_to_folder / "input.csv"))
+            self._vtu_to_csv(
+                self.DEFAULT_OUTPUT_MESH_NAME, DEFAULT_INTERPOLATED_DATA_NAME, str(path_to_folder / "output.csv")
+            )
         # Move all meshes with their respective data
         self.DEFAULT_INPUT_MESH_NAME.rename(
             path_to_folder / self.DEFAULT_INPUT_MESH_NAME.name
@@ -525,6 +534,7 @@ class Run:
         self.DEFAULT_OUTPUT_MESH_NAME.rename(
             path_to_folder / self.DEFAULT_OUTPUT_MESH_NAME.name
         )
+        # Move all configuration files
         pathlib.Path("result.stats.json").rename(path_to_folder / "stats.json")
         pathlib.Path("precice-config.xml").rename(path_to_folder / "precice-config.xml")
         # Copy config.json to the folder
@@ -672,27 +682,37 @@ class Process:
         plt.savefig(path_to_file, dpi=300, bbox_inches="tight")
         plt.close()
 
-
-if __name__ == "__main__":
-    test = ConfigParser(pathlib.Path("config.json"))
-    xmleditor = XMLEditor(test)
+def main(folder_name: str = "results") -> None:
+    configuration = ConfigParser(pathlib.Path("config.json"))
+    working_on_blade = is_blade(configuration.input_mesh)
+    do_gradient = True if working_on_blade else False
+    if working_on_blade:
+        assert configuration.test_function in [
+            "sphere",
+            "rosenbrock",
+            "rastrigin_mod",
+        ], "Unsupported function for blade."
+    xmleditor = XMLEditor(configuration)
     xmleditor.write()
-    run = Run(test, enable_gradient=True)
+    run = Run(configuration, enable_gradient=do_gradient, output_name="result.vtu")
     run.evaluate()
     run.partition()
     run.run()
     run.join()
     run.stats()
-    run.save_results("results")
+    run.save_results(folder_name, save_csv=(not working_on_blade))
     run.clean()
+    if not working_on_blade:
+        process = Process(
+            input_csv_file=PATH_TO_OUT / folder_name / "input.csv",
+            output_csv_file=PATH_TO_OUT / folder_name / "output.csv",
+            function_name=configuration.test_function,
+        )
+        process.compute_error_metrics()
+        process.plot_data(
+            path_to_file=PATH_TO_OUT / "results" / "result.pdf",
+        )
+    return None
 
-    # Plotting
-    process = Process(
-        input_csv_file=PATH_TO_OUT / "results" / "input.csv",
-        output_csv_file=PATH_TO_OUT / "results" / "output.csv",
-        function_name=test.test_function,  # Pass the function name from config
-    )
-    process.compute_error_metrics()
-    process.plot_data(
-        path_to_file=PATH_TO_OUT / "results" / "plot.pdf",
-    )
+if __name__ == "__main__":
+    main(folder_name="blades")
