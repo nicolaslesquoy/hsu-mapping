@@ -9,6 +9,8 @@ from typing import Optional
 # * pip install -r requirements.txt
 import vtk
 import numpy as np
+import matplotlib.pyplot as plt
+p = 1 / 2.54
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## FUNCTIONS
@@ -530,12 +532,154 @@ class Run:
     def clean(self):
         self._run_command("make clean")
 
+class Process:
+    SIZE = 100
+    # Function mapping dictionary
+    FUNCTION_MAP = {
+        'sphere': sphere,
+        'drop_wave': drop_wave,
+        'ackley': ackley,
+        'rosenbrock': rosenbrock,
+        'eggholder': eggholder,
+        'rastrigin_mod': rastrigin_mod
+    }
+
+    def __init__(
+        self,
+        input_csv_file: pathlib.Path,
+        output_csv_file: pathlib.Path,
+        function_name: str
+    ) -> None:
+        self.input_csv_file = input_csv_file
+        self.output_csv_file = output_csv_file
+        # Get the actual function from the map
+        if function_name not in self.FUNCTION_MAP:
+            raise ValueError(f"Unknown function: {function_name}")
+        self.function = self.FUNCTION_MAP[function_name]
+
+    def read_csv(self, which: str = "out"):
+        # Expected format: x, y, z, data_values
+        if which == "in":
+            x, y, z, values = np.loadtxt(
+                self.input_csv_file, unpack=True, skiprows=1, delimiter=","
+            )
+        else:
+            x, y, z, values = np.loadtxt(
+                self.output_csv_file, unpack=True, skiprows=1, delimiter=","
+            )
+        return x, y, z, values
+
+    def compute_error_metrics(self):
+        x_in, y_in, z_in, values_in = self.read_csv(which="in")
+        x_out, y_out, z_out, values_out = self.read_csv(which="out")
+        n = x_out.size
+        minimum, maximum = find_min_max(
+            self.function, generate_grid(self.SIZE)
+        )
+        predicted = np.array(
+            [
+                linear_scaling(self.function, (x, y, z), minimum, maximum)
+                for x, y, z in zip(x_out, y_out, z_out)
+            ]
+        )
+        relative_errors_pointwise = 100 * np.abs((predicted - values_out) / predicted)
+        linfty_global = np.max(np.abs(values_out - predicted))
+        rmse = np.sqrt(1 / n * np.sum((values_out - predicted) ** 2))
+        return (
+            x_out,
+            y_out,
+            z_out,
+            values_out,
+            relative_errors_pointwise,
+            linfty_global,
+            rmse,
+        )
+
+    def plot_data(self, path_to_file: pathlib.Path):
+        # Load data
+        (
+            x_out,
+            _,
+            z_out,
+            output_data,
+            relative_errors,
+            linfty,
+            rmse,
+        ) = self.compute_error_metrics()
+        print(f"L_infty={linfty}, RMSE(global)={rmse}")
+
+        # Get unique x and y values
+        x_unique = np.unique(x_out)
+        y_unique = np.unique(z_out)
+
+        # Sort and reshape data to 2D grid
+        sorted_indices = np.lexsort((x_out, z_out))
+        output_2d = output_data[sorted_indices].reshape(len(y_unique), len(x_unique))
+        relative_errors_2d = relative_errors[sorted_indices].reshape(
+            len(y_unique), len(x_unique)
+        )
+
+        # Set up the 2D plot
+        fontsize = 20
+        labelsize = 15
+        fig, axes = plt.subplots(1, 2, figsize=(50 * p, 22 * p))
+
+        # Plot the left half (output_2d)
+        left_plot = axes[0].imshow(
+            output_2d,
+            extent=[x_unique[0], x_unique[-1], y_unique[0], y_unique[-1]],
+            origin="lower",
+            aspect="auto",
+            cmap="gnuplot",
+        )
+        axes[0].tick_params(labelsize=labelsize)
+        cbar_left = fig.colorbar(left_plot, ax=axes[0], label="Mapped Values")
+        cbar_left.ax.tick_params(labelsize=labelsize)
+        cbar_left.set_label("Mapped Values", fontsize=fontsize)  # Change font size here
+        axes[0].set_aspect("equal")
+        axes[0].set_title("Mapped Values", fontsize=fontsize)
+        axes[0].set_xlabel("$x$", fontsize=fontsize)
+        axes[0].set_ylabel("$y$", fontsize=fontsize)
+
+        # Plot the right half (relative_errors_2d)
+        right_plot = axes[1].imshow(
+            relative_errors_2d,
+            extent=[x_unique[0], x_unique[-1], y_unique[0], y_unique[-1]],
+            origin="lower",
+            aspect="auto",
+            cmap="binary",
+        )
+        axes[1].tick_params(labelsize=labelsize)
+        cbar_right = fig.colorbar(right_plot, ax=axes[1], label="Relative Errors")
+        cbar_right.set_label(
+            "Relative Errors", fontsize=fontsize
+        )  # Change font size here
+        cbar_right.ax.tick_params(labelsize=labelsize)
+        axes[1].set_aspect("equal")
+        axes[1].set_title(
+            "Relative Error $\\varepsilon = 100\\times\\left\\vert\\frac{v_f - v_m}{v_f}\\right\\vert$",
+            fontsize=fontsize,
+        )
+        axes[1].set_xlabel("$x$", fontsize=fontsize)
+        # decimals = 3
+        # plt.suptitle(
+        #     f"$L_\infty$={linfty:.{decimals}e}, RMSE(global)={rmse:.{decimals}e}",
+        #     fontsize=fontsize,
+        # )
+
+        # Adjust layout for better appearance
+        plt.tight_layout()
+        plt.savefig(
+            path_to_file, dpi=300, bbox_inches="tight"
+        )
+        plt.close()
+
 
 if __name__ == "__main__":
     test = ConfigParser(pathlib.Path("config.json"))
     xmleditor = XMLEditor(test)
     xmleditor.write()
-    run = Run(test)
+    run = Run(test, enable_gradient=True)
     run.evaluate()
     run.partition()
     run.run()
@@ -543,3 +687,14 @@ if __name__ == "__main__":
     run.stats()
     run.save_results("results")
     run.clean()
+
+    # Plotting
+    process = Process(
+        input_csv_file=PATH_TO_OUT / "results" / "input.csv",
+        output_csv_file=PATH_TO_OUT / "results" / "output.csv",
+        function_name=test.test_function  # Pass the function name from config
+    )
+    process.compute_error_metrics()
+    process.plot_data(
+        path_to_file=PATH_TO_OUT / "results" / "plot.pdf",
+    )
