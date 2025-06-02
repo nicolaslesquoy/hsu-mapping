@@ -25,3 +25,4 @@ meshes/
 *.vtu
 .ruff_cache
 *.txt
+stretched/

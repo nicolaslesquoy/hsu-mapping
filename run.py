@@ -710,9 +710,9 @@ def main(folder_name: str = "results") -> None:
         )
         process.compute_error_metrics()
         process.plot_data(
-            path_to_file=PATH_TO_OUT / "results" / "result.pdf",
+            path_to_file=PATH_TO_OUT / folder_name / "result.png",
         )
     return None
 
 if __name__ == "__main__":
-    main(folder_name="blades")
+    main(folder_name="test_results")
