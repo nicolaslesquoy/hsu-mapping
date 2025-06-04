@@ -27,3 +27,5 @@ meshes/
 stretched/
 test/
 *.slurm
+__pycache__/
+*.pyc

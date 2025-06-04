@@ -18,6 +18,7 @@ p = 1 / 2.54
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ? Center of the computational domain for lid-driven cavity
 CENTER = (0.5, 0.0, 0.5)
+# CENTER = (0.5, 0.5, 0.0)  # Center for GMSH mesh generation
 
 
 def sphere(x: tuple) -> float:
@@ -174,6 +175,7 @@ def read_vtu(path_to_vtu: pathlib.Path):
     )
     return point_coords
 
+
 def adjust_support_radius(path_to_mesh: pathlib.Path) -> float:
     """
     This function adjusts the support radius based on the mesh size.
@@ -276,10 +278,16 @@ class XMLEditor:
         self.mapping_method: str = config.mapping_method
         # Get the additional parameters for RBF methods
         if config.additional_parameters is not None:
-            self.additional_parameters: tuple[str, float, float] = config.additional_parameters
+            self.additional_parameters: tuple[str, float, float] = (
+                config.additional_parameters
+            )
         # Ajust the support radius if needed
         suggested_radius = adjust_support_radius(config.input_mesh)
-        if self.additional_parameters is not None and self.additional_parameters[1] > suggested_radius and suggested_radius > 0.1:
+        if (
+            self.additional_parameters is not None
+            and self.additional_parameters[1] > suggested_radius
+            and suggested_radius > 0.1
+        ):
             print("Replacing support radius with suggested value.")
             self.additional_parameters = (
                 self.additional_parameters[0],
@@ -287,16 +295,30 @@ class XMLEditor:
                 self.additional_parameters[2],
             )
         # Get the template file to create the XML config
-        if "rbf" in self.mapping_method and self.additional_parameters[0] in ["thin-plate-splines", "volume-splines"]:
+        if "rbf" in self.mapping_method and self.additional_parameters[0] in [
+            "thin-plate-splines",
+            "volume-splines",
+        ]:
             # Global support and no shape parameter
             self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_global.txt"
-        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["multiquadrics","inverse-multiquadrics"]:
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in [
+            "multiquadrics",
+            "inverse-multiquadrics",
+        ]:
             # Global support and shape parameter
             self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_shape.txt"
-        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["gaussian"]:
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in [
+            "gaussian"
+        ]:
             # Local support and shape parameter
             self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_gaussian.txt"
-        elif "rbf" in self.mapping_method and self.additional_parameters[0] not in ["thin-plate-spline", "gaussian", "multiquadrics", "volume-splines", "inverse-multiquadrics"]:
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] not in [
+            "thin-plate-spline",
+            "gaussian",
+            "multiquadrics",
+            "volume-splines",
+            "inverse-multiquadrics",
+        ]:
             # Local support and no shape parameter
             self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_local.txt"
         else:
@@ -307,26 +329,56 @@ class XMLEditor:
         lines = read_txt(self.path_to_template)
         content: str = "".join(lines)
 
-        if "rbf" in self.mapping_method and self.additional_parameters[0] in ["thin-plate-splines", "volume-splines"]:
+        if "rbf" in self.mapping_method and self.additional_parameters[0] in [
+            "thin-plate-splines",
+            "volume-splines",
+        ]:
             # Global support and no shape parameter
-            content = content.replace("$rbf_type$", self.mapping_method) # Method name
-            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
-        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["multiquadrics","inverse-multiquadrics"]:
+            content = content.replace("$rbf_type$", self.mapping_method)  # Method name
+            content = content.replace(
+                "$basis-function$", str(self.additional_parameters[0])
+            )  # Basis function
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in [
+            "multiquadrics",
+            "inverse-multiquadrics",
+        ]:
             # Global support and shape parameter
-            content = content.replace("$rbf_type$", self.mapping_method) # Method name
-            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
-            content = content.replace("$shape-parameter$", str(self.additional_parameters[2])) # Shape parameter
-        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["gaussian"]:
+            content = content.replace("$rbf_type$", self.mapping_method)  # Method name
+            content = content.replace(
+                "$basis-function$", str(self.additional_parameters[0])
+            )  # Basis function
+            content = content.replace(
+                "$shape-parameter$", str(self.additional_parameters[2])
+            )  # Shape parameter
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in [
+            "gaussian"
+        ]:
             # Local support and shape parameter
-            content = content.replace("$rbf_type$", self.mapping_method) # Method name
-            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
-            content = content.replace("$radius$", str(self.additional_parameters[1])) # Support radius
-            content = content.replace("$shape-parameter$", str(self.additional_parameters[2])) # Shape parameter
-        elif "rbf" in self.mapping_method and self.additional_parameters[0] not in ["thin-plate-spline", "gaussian", "multiquadrics", "volume-splines", "inverse-multiquadrics"]:
+            content = content.replace("$rbf_type$", self.mapping_method)  # Method name
+            content = content.replace(
+                "$basis-function$", str(self.additional_parameters[0])
+            )  # Basis function
+            content = content.replace(
+                "$radius$", str(self.additional_parameters[1])
+            )  # Support radius
+            content = content.replace(
+                "$shape-parameter$", str(self.additional_parameters[2])
+            )  # Shape parameter
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] not in [
+            "thin-plate-spline",
+            "gaussian",
+            "multiquadrics",
+            "volume-splines",
+            "inverse-multiquadrics",
+        ]:
             # Local support and no shape parameter
-            content = content.replace("$rbf_type$", self.mapping_method) # Method name
-            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
-            content = content.replace("$radius$", str(self.additional_parameters[1]))  # Support radius
+            content = content.replace("$rbf_type$", self.mapping_method)  # Method name
+            content = content.replace(
+                "$basis-function$", str(self.additional_parameters[0])
+            )  # Basis function
+            content = content.replace(
+                "$radius$", str(self.additional_parameters[1])
+            )  # Support radius
         else:
             content = content.replace("$method$", self.mapping_method)
             assert "$method$" not in content
@@ -573,9 +625,15 @@ class Run:
         path_to_folder.mkdir(parents=True, exist_ok=True)
         # Read and process results
         if save_csv:
-            self._vtu_to_csv(self.DEFAULT_INPUT_MESH_NAME, DEFAULT_DATA_NAME, str(path_to_folder / "input.csv"))
             self._vtu_to_csv(
-                self.DEFAULT_OUTPUT_MESH_NAME, DEFAULT_INTERPOLATED_DATA_NAME, str(path_to_folder / "output.csv")
+                self.DEFAULT_INPUT_MESH_NAME,
+                DEFAULT_DATA_NAME,
+                str(path_to_folder / "input.csv"),
+            )
+            self._vtu_to_csv(
+                self.DEFAULT_OUTPUT_MESH_NAME,
+                DEFAULT_INTERPOLATED_DATA_NAME,
+                str(path_to_folder / "output.csv"),
             )
         # Move all meshes with their respective data
         self.DEFAULT_INPUT_MESH_NAME.rename(
@@ -732,10 +790,13 @@ class Process:
         plt.savefig(path_to_file, dpi=300, bbox_inches="tight")
         plt.close()
 
+
 def main(folder_name: str = "results") -> None:
     configuration = ConfigParser(pathlib.Path("config.json"))
     working_on_blade = is_blade(configuration.input_mesh)
-    do_gradient = True if configuration.mapping_method == "nearest-neighbor-gradient" else False
+    do_gradient = (
+        True if configuration.mapping_method == "nearest-neighbor-gradient" else False
+    )
     if do_gradient:
         assert configuration.test_function in [
             "sphere",
@@ -763,6 +824,7 @@ def main(folder_name: str = "results") -> None:
             path_to_file=PATH_TO_OUT / folder_name / "result.png",
         )
     return None
+
 
 if __name__ == "__main__":
     main(folder_name="test_results")

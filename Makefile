@@ -7,8 +7,8 @@ run:
 mesh:
 	$(PYTHON) mesh.py
 
-plot:
-	$(PYTHON) plot.py
+batch:
+	$(PYTHON) batch.py
 
 lint:
 	ruff check *.py

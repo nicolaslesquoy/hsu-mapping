@@ -132,7 +132,7 @@ def write(points: list, original_grid, filename: str):
     new_grid = vtk.vtkUnstructuredGrid()  # type: ignore
     new_grid.DeepCopy(original_grid)
     # Only modify the points ad not the rest of the file
-    new_points = vtk.vtkPoints() # type: ignore
+    new_points = vtk.vtkPoints()  # type: ignore
     for point in points:
         new_points.InsertPoint(
             point[3], point[0], point[1], point[2]

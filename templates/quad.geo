@@ -1,10 +1,12 @@
-lc = 1e-2;
-n = 100;
+// Number of elements in each direction
+n = $nb_elements$;
+// Characteristic length
+lc = 1.0/n;
 
 Point(1) = {0, 0, 0, lc};
 Point(2) = {1.0, 0,  0, lc};
-Point(3) = {1.0, 1.0, 0, lc};
-Point(4) = {0, 1.0, 0, lc};
+Point(3) = {1.0, 0, 1.0, lc};
+Point(4) = {0, 0, 1.0, lc};
 
 Line(1) = {1, 2};
 Line(2) = {3, 2};
