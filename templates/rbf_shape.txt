@@ -28,9 +28,9 @@
     <receive-mesh name="A-Mesh" from="A" />
     <provide-mesh name="B-Mesh" />
     <read-data name="Data" mesh="B-Mesh" />
-    <mapping:$rbf_type$ direction="read" from="A-Mesh" to="B-Mesh" constraint="consistent">
-      <basis-function:$basis-function$ support-radius="$radius$"/>
-    </mapping:rbf>
+    <mapping:$rbf_type$ from="A-Mesh" to="B-Mesh" direction="read" constraint="consistent">
+      <basis-function:$basis-function$ shape-parameter="$shape-parameter$" />
+    </mapping:$rbf_type$>
   </participant>
 
   <m2n:sockets acceptor="A" connector="B" exchange-directory="." />

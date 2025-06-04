@@ -163,6 +163,37 @@ DEFAULT_INTERPOLATED_DATA_NAME = "InterpolatedData"
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## ConfigParser + related functions
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def read_vtu(path_to_vtu: pathlib.Path):
+    reader = vtk.vtkXMLUnstructuredGridReader()  # type: ignore
+    reader.SetFileName(str(path_to_vtu))
+    reader.Update()
+    mesh = reader.GetOutput()
+    points = mesh.GetPoints()
+    point_coords = np.array(
+        [points.GetPoint(i) for i in range(points.GetNumberOfPoints())]
+    )
+    return point_coords
+
+def adjust_support_radius(path_to_mesh: pathlib.Path) -> float:
+    """
+    This function adjusts the support radius based on the mesh size.
+    It computes the bounding box of the mesh and returns the maximum dimension.
+    """
+    nb_vertices = 10
+    mesh = read_vtu(path_to_mesh)
+    p1 = mesh[0]
+    p2 = mesh[1]
+    radius = 0.1
+    if abs(p1[0] - p2[0]) < 1e-5:
+        radius = abs(p1[1] - p2[1]) * nb_vertices
+    elif abs(p1[1] - p2[1]) < 1e-5:
+        radius = abs(p1[0] - p2[0]) * nb_vertices
+    else:
+        radius = np.linalg.norm(p1 - p2) * nb_vertices
+    print(f"Support radius adjusted to {radius} based on mesh size.")
+    return float(radius)
+
+
 def read_json(path_to_file: pathlib.Path) -> dict:
     """
     This function reads a given JSON file.
@@ -179,13 +210,14 @@ def is_blade(path_to_file: pathlib.Path) -> bool:
     return True if "vtk" in path_to_file.name else False
 
 
-def parse_parameters(method: str, parameters: dict) -> tuple[str, float] | None:
+def parse_parameters(method: str, parameters: dict) -> tuple[str, float, float] | None:
     if "rbf" not in method:
         return None
     else:
         basis_function: str = parameters["basis-function"]
         support_radius: float = float(parameters["support-radius"])
-    return (basis_function, support_radius)
+        shape_parameter: float = float(parameters["shape-parameter"])
+    return (basis_function, support_radius, shape_parameter)
 
 
 class ConfigParser:
@@ -212,7 +244,7 @@ class ConfigParser:
             "drop_wave",
         ], "Unsupported function."
         self.mapping_method: str = config["mapping-method"]
-        self.additional_parameters: tuple[str, float] | None = parse_parameters(
+        self.additional_parameters: tuple[str, float, float] | None = parse_parameters(
             self.mapping_method, config["additional-config"]
         )
         self.number_of_processes: int = config["nb-procs"]
@@ -242,23 +274,59 @@ class XMLEditor:
 
     def __init__(self, config: "ConfigParser") -> None:
         self.mapping_method: str = config.mapping_method
+        # Get the additional parameters for RBF methods
         if config.additional_parameters is not None:
-            self.additional_parameters: tuple[str, float] = config.additional_parameters
-        if "rbf" in self.mapping_method:
-            self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf.txt"
+            self.additional_parameters: tuple[str, float, float] = config.additional_parameters
+        # Ajust the support radius if needed
+        suggested_radius = adjust_support_radius(config.input_mesh)
+        if self.additional_parameters is not None and self.additional_parameters[1] > suggested_radius and suggested_radius > 0.1:
+            print("Replacing support radius with suggested value.")
+            self.additional_parameters = (
+                self.additional_parameters[0],
+                suggested_radius,
+                self.additional_parameters[2],
+            )
+        # Get the template file to create the XML config
+        if "rbf" in self.mapping_method and self.additional_parameters[0] in ["thin-plate-splines", "volume-splines"]:
+            # Global support and no shape parameter
+            self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_global.txt"
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["multiquadrics","inverse-multiquadrics"]:
+            # Global support and shape parameter
+            self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_shape.txt"
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["gaussian"]:
+            # Local support and shape parameter
+            self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_gaussian.txt"
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] not in ["thin-plate-spline", "gaussian", "multiquadrics", "volume-splines", "inverse-multiquadrics"]:
+            # Local support and no shape parameter
+            self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "rbf_local.txt"
         else:
+            # No RBF
             self.path_to_template: pathlib.Path = PATH_TO_TEMPLATES / "no_rbf.txt"
 
     def edit(self) -> str:
         lines = read_txt(self.path_to_template)
         content: str = "".join(lines)
-        if "rbf" in self.mapping_method:
-            content = content.replace("$rbf_type$", self.mapping_method)
-            assert "$rbf_type$" not in content
-            content = content.replace("$basis-function$", self.additional_parameters[0])
-            assert "$basis-function$" not in content
-            content = content.replace("$radius$", str(self.additional_parameters[1]))
-            assert "$radius$" not in content
+
+        if "rbf" in self.mapping_method and self.additional_parameters[0] in ["thin-plate-splines", "volume-splines"]:
+            # Global support and no shape parameter
+            content = content.replace("$rbf_type$", self.mapping_method) # Method name
+            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["multiquadrics","inverse-multiquadrics"]:
+            # Global support and shape parameter
+            content = content.replace("$rbf_type$", self.mapping_method) # Method name
+            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
+            content = content.replace("$shape-parameter$", str(self.additional_parameters[2])) # Shape parameter
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] in ["gaussian"]:
+            # Local support and shape parameter
+            content = content.replace("$rbf_type$", self.mapping_method) # Method name
+            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
+            content = content.replace("$radius$", str(self.additional_parameters[1])) # Support radius
+            content = content.replace("$shape-parameter$", str(self.additional_parameters[2])) # Shape parameter
+        elif "rbf" in self.mapping_method and self.additional_parameters[0] not in ["thin-plate-spline", "gaussian", "multiquadrics", "volume-splines", "inverse-multiquadrics"]:
+            # Local support and no shape parameter
+            content = content.replace("$rbf_type$", self.mapping_method) # Method name
+            content = content.replace("$basis-function$", str(self.additional_parameters[0])) # Basis function
+            content = content.replace("$radius$", str(self.additional_parameters[1]))  # Support radius
         else:
             content = content.replace("$method$", self.mapping_method)
             assert "$method$" not in content
@@ -273,18 +341,6 @@ class XMLEditor:
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## Run + related functions
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-def read_vtu(path_to_vtu: pathlib.Path):
-    reader = vtk.vtkXMLUnstructuredGridReader()  # type: ignore
-    reader.SetFileName(str(path_to_vtu))
-    reader.Update()
-    mesh = reader.GetOutput()
-    points = mesh.GetPoints()
-    point_coords = np.array(
-        [points.GetPoint(i) for i in range(points.GetNumberOfPoints())]
-    )
-    return point_coords
 
 
 def find_min_max(func, grid: np.ndarray):
@@ -338,12 +394,6 @@ class Run:
     DEFAULT_OUTPUT_MESH_NAME = pathlib.Path("result.vtu")
     DEFAULT_MESH_NAME_A = "a_mesh"
     DEFAULT_MESH_NAME_B = "b_mesh"
-    # DEFAULT_OUTPUT_MESH_NAME = (
-    #     "result_"
-    #     + f"f{FLUID_NODES_MESH_NAME.split('.')[0].split('_')[-1]}"
-    #     + f"_s{STRUCTURE_MESH_NAME.split('.')[0].split('_')[-1]}"
-    #     + ".vtu"
-    # )
     SIZE = 100
 
     def __init__(
@@ -462,7 +512,7 @@ class Run:
         if self.enable_gradient:
             cmd = f'precice-aste-evaluate -m {self.parameters.input_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --gradient --log DEBUG'
         else:
-            cmd = f'precice-aste-evaluate -m {self.parameters.input_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --gradient --log DEBUG'
+            cmd = f'precice-aste-evaluate -m {self.parameters.input_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --log DEBUG'
         self._run_command(cmd)
 
     def partition(
@@ -685,13 +735,13 @@ class Process:
 def main(folder_name: str = "results") -> None:
     configuration = ConfigParser(pathlib.Path("config.json"))
     working_on_blade = is_blade(configuration.input_mesh)
-    do_gradient = True if working_on_blade else False
-    if working_on_blade:
+    do_gradient = True if configuration.mapping_method == "nearest-neighbor-gradient" else False
+    if do_gradient:
         assert configuration.test_function in [
             "sphere",
             "rosenbrock",
             "rastrigin_mod",
-        ], "Unsupported function for blade."
+        ], "Unsupported function for blade with gradient computation."
     xmleditor = XMLEditor(configuration)
     xmleditor.write()
     run = Run(configuration, enable_gradient=do_gradient, output_name="result.vtu")

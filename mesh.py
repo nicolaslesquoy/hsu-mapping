@@ -184,16 +184,6 @@ def plot(
         centers[:, 0], centers[:, 2], c="red", s=50, label="Centers", marker="x"
     )  # x, z coordinates
 
-    # for i in range(len(nodes)):
-    #     ax.annotate(
-    #         f"{int(nodes[i, 3])}",
-    #         (nodes[i, 0], nodes[i, 2]),
-    #         xytext=(-5, 0),  # 5 points offset in x direction
-    #         textcoords="offset points",
-    #         fontsize=8,
-    #         color="red"
-    #     )
-
     ax.set_xlabel("X", fontsize=20)
     ax.set_ylabel("Z", fontsize=20)
     ax.tick_params(axis="both", which="major", labelsize=20)

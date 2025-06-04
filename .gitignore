@@ -24,5 +24,6 @@ config.json
 meshes/
 *.vtu
 .ruff_cache
-*.txt
 stretched/
+test/
+*.slurm
