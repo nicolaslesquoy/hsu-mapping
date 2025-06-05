@@ -282,18 +282,18 @@ class XMLEditor:
                 config.additional_parameters
             )
         # Ajust the support radius if needed
-        suggested_radius = adjust_support_radius(config.input_mesh)
-        if (
-            self.additional_parameters is not None
-            and self.additional_parameters[1] > suggested_radius
-            and suggested_radius > 0.1
-        ):
-            print("Replacing support radius with suggested value.")
-            self.additional_parameters = (
-                self.additional_parameters[0],
-                suggested_radius,
-                self.additional_parameters[2],
-            )
+        # suggested_radius = adjust_support_radius(config.input_mesh)
+        # if (
+        #     self.additional_parameters is not None
+        #     and self.additional_parameters[1] > suggested_radius
+        #     and suggested_radius > 0.1
+        # ):
+        #     print("Replacing support radius with suggested value.")
+        #     self.additional_parameters = (
+        #         self.additional_parameters[0],
+        #         suggested_radius,
+        #         self.additional_parameters[2],
+        #     )
         # Get the template file to create the XML config
         if "rbf" in self.mapping_method and self.additional_parameters[0] in [
             "thin-plate-splines",
@@ -813,16 +813,16 @@ def main(folder_name: str = "results") -> None:
     run.stats()
     run.save_results(folder_name, save_csv=(not working_on_blade))
     run.clean()
-    if not working_on_blade:
-        process = Process(
-            input_csv_file=PATH_TO_OUT / folder_name / "input.csv",
-            output_csv_file=PATH_TO_OUT / folder_name / "output.csv",
-            function_name=configuration.test_function,
-        )
-        process.compute_error_metrics()
-        process.plot_data(
-            path_to_file=PATH_TO_OUT / folder_name / "result.png",
-        )
+    # if not working_on_blade:
+    #     process = Process(
+    #         input_csv_file=PATH_TO_OUT / folder_name / "input.csv",
+    #         output_csv_file=PATH_TO_OUT / folder_name / "output.csv",
+    #         function_name=configuration.test_function,
+    #     )
+    #     process.compute_error_metrics()
+    #     process.plot_data(
+    #         path_to_file=PATH_TO_OUT / folder_name / "result.png",
+    #     )
     return None
 
 

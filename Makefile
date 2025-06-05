@@ -10,6 +10,9 @@ mesh:
 batch:
 	$(PYTHON) batch.py
 
+test:
+	$(PYTHON) test.py
+
 lint:
 	ruff check *.py
 	@echo "Linting completed."

@@ -30,3 +30,7 @@ Physical Surface("My surface") = {1};
 Mesh.Algorithm = 8;
 Mesh.RecombineAll = 1;
 Mesh.SubdivisionAlgorithm = 1;
+
+// Optional: Ensure 2D elements are created properly
+Mesh.SaveAll = 0;
+Mesh.Binary = 0;
