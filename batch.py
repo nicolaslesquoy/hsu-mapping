@@ -47,7 +47,7 @@ class MeshGenerator:
     def generate_mesh(self):
         """Generate the mesh using GMSH."""
         self.edit_template()
-        
+
         try:
             # Create 2D mesh using GMSH
             subprocess.run(
@@ -55,18 +55,21 @@ class MeshGenerator:
                     "gmsh",
                     str(PATH_TO_MESHES / f"{self.mesh_name}.geo"),
                     "-2",  # 2D mesh
-                    "-format", "msh2", 
+                    "-format",
+                    "msh2",
                     "-o",
                     str(PATH_TO_MESHES / f"{self.mesh_name}.msh"),
                 ],
                 check=True,
             )
-            
+
             # Verify the mesh file exists
             mesh_file = PATH_TO_MESHES / f"{self.mesh_name}.msh"
             if not mesh_file.exists() or mesh_file.stat().st_size == 0:
-                raise FileNotFoundError(f"GMSH failed to create valid mesh file: {mesh_file}")
-                
+                raise FileNotFoundError(
+                    f"GMSH failed to create valid mesh file: {mesh_file}"
+                )
+
         except subprocess.CalledProcessError as e:
             print(f"GMSH mesh generation failed: {e}")
             raise
@@ -74,20 +77,21 @@ class MeshGenerator:
     def convert_mesh(self):
         """Convert the mesh to a different format using meshio Python API."""
         import meshio
-        
+
         print(f"Converting {self.mesh_path} to VTU format...")
         try:
             # Read the mesh
             mesh = meshio.read(str(self.mesh_path))
-            
+
             # Write to VTU format
             vtu_path = str(PATH_TO_MESHES / f"{self.mesh_name}.vtu")
             meshio.write(vtu_path, mesh)
-            
+
             print(f"Successfully converted to {vtu_path}")
         except Exception as e:
             print(f"Error converting mesh: {e}")
             raise
+
 
 def batch_generate_meshes(element_type="quad"):
     """Generate multiple meshes in batch mode."""
@@ -101,6 +105,7 @@ def batch_generate_meshes(element_type="quad"):
 
 class Batch:
     """Class to handle running simulations in batch mode."""
+
     pass
 
 

@@ -193,6 +193,7 @@ def plot(
     plt.savefig(f"{filename}.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+
 def check_duplicated_nodes(points: list) -> None:
     # Check for duplicated nodes using their coordinates
     seen = set()
