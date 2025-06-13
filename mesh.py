@@ -40,11 +40,12 @@ def modify_nodes(nodes: list) -> list:
     left = filter_points(nodes, coordinate="x", target=min(p[0] for p in nodes))
     middle_index = len(bottom) // 2 + 1
     L = (max(p[0] for p in nodes) - min(p[0] for p in nodes)) / 2
-    s = 1.05
+    s = 1.01
     if abs(s - 1.0) < 1e-6:
         dx = L / (middle_index - 1)
     else:
         dx = L * (1 - s) / (1 - s ** (middle_index - 1))
+    print(f"Stretching factor: {s}, dx: {dx}")
     # Stretching vertically (z coordinate)
     for i in range(len(bottom)):
         column_pos = bottom[i][0]
@@ -129,6 +130,7 @@ def modify_centers(old_centers: list, old_nodes: list, new_nodes: list) -> list:
 
 def write(points: list, original_grid, filename: str):
     # Create a deep copy of the original grid to preserve all data
+    check_duplicated_nodes(points)
     new_grid = vtk.vtkUnstructuredGrid()  # type: ignore
     new_grid.DeepCopy(original_grid)
     # Only modify the points ad not the rest of the file
@@ -190,6 +192,21 @@ def plot(
     # ax.legend()
     plt.savefig(f"{filename}.png", dpi=300, bbox_inches="tight")
     plt.close()
+
+def check_duplicated_nodes(points: list) -> None:
+    # Check for duplicated nodes using their coordinates
+    seen = set()
+    duplicates = []
+    for point in points:
+        coord = (point[0], point[1], point[2])
+        if coord in seen:
+            duplicates.append(point)
+        else:
+            seen.add(coord)
+    if duplicates:
+        print("Duplicated nodes found:")
+        for dup in duplicates:
+            print(f"Node ID: {dup[3]}, Coordinates: {dup[:3]}")
 
 
 if __name__ == "__main__":

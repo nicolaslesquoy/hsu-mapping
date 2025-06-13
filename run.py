@@ -10,6 +10,8 @@ from typing import Optional
 import vtk
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogLocator
+import random
 
 p = 1 / 2.54
 
@@ -231,9 +233,15 @@ class ConfigParser:
         assert path_to_config.exists(), "Configuration file not found."
         config = read_json(path_to_config)
         self.path_to_config: pathlib.Path = path_to_config
-        self.input_mesh: pathlib.Path = PATH_TO_MESHES / config["input-mesh"]
+        if "stretched" in config["input-mesh"]:
+            self.input_mesh: pathlib.Path = PATH_TO_STRETCHED / config["input-mesh"]
+        else:
+            self.input_mesh: pathlib.Path = PATH_TO_MESHES / config["input-mesh"]
         assert self.input_mesh.exists(), "Input mesh not found."
-        self.output_mesh: pathlib.Path = PATH_TO_MESHES / config["output-mesh"]
+        if "stretched" in config["output-mesh"]:
+            self.output_mesh: pathlib.Path = PATH_TO_STRETCHED / config["output-mesh"]
+        else:
+            self.output_mesh: pathlib.Path = PATH_TO_MESHES / config["output-mesh"]
         assert self.output_mesh.exists(), "Output mesh not found"
         self.is_blade: bool = is_blade(self.input_mesh)
         self.test_function: str = config["test-function"]
@@ -813,18 +821,196 @@ def main(folder_name: str = "results") -> None:
     run.stats()
     run.save_results(folder_name, save_csv=(not working_on_blade))
     run.clean()
-    # if not working_on_blade:
-    #     process = Process(
-    #         input_csv_file=PATH_TO_OUT / folder_name / "input.csv",
-    #         output_csv_file=PATH_TO_OUT / folder_name / "output.csv",
-    #         function_name=configuration.test_function,
-    #     )
-    #     process.compute_error_metrics()
-    #     process.plot_data(
-    #         path_to_file=PATH_TO_OUT / folder_name / "result.png",
-    #     )
+    if not working_on_blade:
+        process = Process(
+            input_csv_file=PATH_TO_OUT / folder_name / "input.csv",
+            output_csv_file=PATH_TO_OUT / folder_name / "output.csv",
+            function_name=configuration.test_function,
+        )
+        process.compute_error_metrics()
+        process.plot_data(
+            path_to_file=PATH_TO_OUT / folder_name / "result.png",
+        )
     return None
 
+### Compute errors from CSV files without border and create data structure based on that
+
+def read_csv(path_to_csv: pathlib.Path):
+    x,y,z,interpolated_data = np.loadtxt(path_to_csv, delimiter=',', skiprows=1, unpack=True)
+    return (x,y,z,interpolated_data)
+
+def compute_errors_without_borders(path_to_csv: pathlib.Path, function) -> tuple[float, float]:
+    x_out, y_out, z_out, values_out = read_csv(path_to_csv)
+    # Compute the function values at the points
+    minimum, maximum = find_min_max(function, generate_grid(Process.SIZE))
+    predicted = np.array(
+            [
+                linear_scaling(function, (x, y, z), minimum, maximum)
+                for x, y, z in zip(x_out, y_out, z_out)
+            ]
+        )
+    values_out = np.array(values_out)
+    x_min = np.min(x_out)
+    x_max = np.max(x_out)
+    z_min = np.min(z_out)
+    z_max = np.max(z_out)
+    # Remove all border points
+    # All points with abs(x - x_min) < threshold, abs(x - x_max) < threshold, same for z
+    threshold = 1e-5
+    mask = (
+        (np.abs(x_out - x_min) >= threshold)
+        & (np.abs(x_out - x_max) >= threshold)
+        & (np.abs(z_out - z_min) >= threshold)
+        & (np.abs(z_out - z_max) >= threshold)
+    )
+    x_out = x_out[mask]
+    y_out = y_out[mask]
+    z_out = z_out[mask]
+    values_out = values_out[mask]
+    predicted = predicted[mask]
+    n = x_out.size
+    # Compute the error
+    linfty_global = np.max(np.abs(values_out - predicted))
+    rmse = np.sqrt(1 / n * np.sum((values_out - predicted) ** 2))
+    return rmse, linfty_global
+
+def compute_errors(path_to_dir: pathlib.Path, function):
+    # iterate over all subdirectories
+    errors = {}
+    for subdir in path_to_dir.iterdir():
+        if subdir.is_dir():
+            name = subdir.name
+            case_name = name.split("_")[0]
+            csv_file = subdir / "output.csv"
+            assert csv_file.exists(), f"CSV file not found in {subdir}"
+            rmse, linfty = compute_errors_without_borders(csv_file, function)
+            print(f"Case: {case_name}, Mesh Size: {name.split('_')[1]}, RMSE: {rmse}, Linfty: {linfty}")
+            mesh_size = name.split("_")[1]
+            if case_name not in errors:
+                errors[case_name] = []
+            errors[case_name].append([mesh_size, rmse, linfty])
+    return errors
+
+def read_errors(path_to_dir: pathlib.Path, function):
+    # Read errors from all subdirectories
+    errors = {}
+    fname = "stats.json"
+    for subdir in path_to_dir.iterdir():
+        if subdir.is_dir():
+            name = subdir.name
+            case_name = name.split("_")[0]
+            stats_file = subdir / fname
+            if not stats_file.exists():
+                print(f"Stats file not found in {subdir}")
+                continue
+            with open(stats_file, "r") as f:
+                data = json.load(f)
+            rmse = data["relative-l2"]
+            linfty = data["abs_max"]
+            mesh_size = name.split("_")[1]
+            if case_name not in errors:
+                errors[case_name] = []
+            errors[case_name].append([mesh_size, rmse, linfty])
+    return errors
+            
+def plot_errors(errors: dict, function):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Define mesh size range for reference lines
+    mesh_sizes = np.array([32, 64, 128, 256])
+    all_sizes = []
+    all_linfties = []
+    for case, error_data in errors.items():
+        sizes = [float(data[0]) for data in error_data]
+        linfties = [data[2] for data in error_data]
+        all_sizes.extend(sizes)
+        all_linfties.extend(linfties)
+        markers = ['o', 's', 'D', '^', 'v', '<', '>', 'p', '*', 'h', 'H', '+', 'x', '|', '_']
+        random_marker = random.choice(markers)
+        ax.plot(sizes, linfties, marker=random_marker, label=case)
+
+    ax.set_xlabel('Mesh Size', fontsize=12)
+    ax.set_ylabel('$L_\\infty$ Error', fontsize=12)
+    ax.set_title(f'Error Convergence Analysis for {function.__name__}', fontsize=14)
+    ax.set_xscale('log')  # Use base-2 for clearer mesh size reading
+    ax.set_yscale('log')
+    ax.grid(True, which='both', linestyle='--', alpha=0.6)
+
+    # Add legend outside the plot below the x-axis
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3, fontsize=10)
+    
+    fig.tight_layout()
+    plt.savefig(f'error_analysis_{function.__name__}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+def batch(function):
+    available_mapping_methods = {
+        # "nearest-neighbor": "NN",
+        # "nearest-projection": "NP",
+        # "nearest-neighbor-gradient": "NNG",
+        "rbf/compact-polynomial-c0": "RBFC0",
+        "rbf/compact-polynomial-c2": "RBFC2",
+        "rbf/compact-polynomial-c4": "RBFC4",
+        "rbf/compact-polynomial-c6": "RBFC6",
+        "rbf/compact-polynomial-c8": "RBFC8",
+        "rbf/compact-tps-c2": "RBFTPSC2",
+        # "rbf/multiquadrics": "RBFMQ",
+        # "rbf/inverse-multiquadrics": "RBFIMQ",
+        # "rbf/gaussian": "RBFGAUSS",
+        # "rbf/volume-splines": "RBFVS",
+        # "rbf/thin-plate-splines": "RBFTPS",
+    }
+    mesh_sizes = ["32", "64", "128", "256"]
+    input_meshes = [
+        f"fluid_nodes_fastest_{size}.vtu" for size in mesh_sizes
+    ]
+    output_meshes = [
+        f"fluid_centers_fastest_{size}.vtu" for size in mesh_sizes
+    ]
+    for mapping_method, short_name in available_mapping_methods.items():
+        for i in range(len(input_meshes)):
+            input_mesh = input_meshes[i]
+            output_mesh = output_meshes[i]
+            # Create a config file for each case
+            if "RBF" in short_name:
+                config_data = {
+                    "input-mesh": input_mesh,
+                    "output-mesh": output_mesh,
+                    "test-function": "rastrigin_mod",
+                    "mapping-method": mapping_method.split("/")[0],
+                    "additional-config": {
+                        "basis-function": mapping_method.split("/")[1],
+                        "support-radius": 0.01,
+                        "shape-parameter": 0.01,
+                    },
+                    "nb-procs": 8,
+                }
+            else:
+                config_data = {
+                    "input-mesh": input_mesh,
+                    "output-mesh": output_mesh,
+                    "test-function": "rastrigin_mod",
+                    "mapping-method": mapping_method,
+                    "additional-config": {
+                        "basis-function": None,
+                        "support-radius": 0.01,
+                        "shape-parameter": 0.1,
+                    },
+                    "nb-procs": 8,
+                }
+            config_file = pathlib.Path(f"config.json")
+            with open(config_file, "w") as f:
+                json.dump(config_data, f, indent=2)
+            # Run the main function with the generated config file
+            try:
+                main(folder_name=f"{short_name}_{output_mesh.split('.')[0].split('_')[-1]}_{function.__name__}")
+            except Exception as e:
+                print(f"Error occurred for {short_name} with mesh {output_mesh}: {e}")
+                continue
 
 if __name__ == "__main__":
-    main(folder_name="test_results")
+    # batch(rastrigin_mod)
+    # main(folder_name="RBFGAUSS_64_rastrigin_mod")
+    errors = compute_errors(PATH_TO_OUT, rastrigin_mod)
+    print(errors)
+    plot_errors(errors, rastrigin_mod)
