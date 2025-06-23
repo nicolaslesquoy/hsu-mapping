@@ -1,4 +1,4 @@
-PYTHON=python
+PYTHON=$(HOME)/.venv/bin/python
 
 run:
 	$(PYTHON) run.py > run.log 2>&1

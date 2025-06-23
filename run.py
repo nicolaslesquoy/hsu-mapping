@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import LogLocator
 import random
+import pandas as pd
 
 p = 1 / 2.54
 
@@ -441,6 +442,7 @@ class Run:
         config: "ConfigParser",
         enable_gradient: bool = False,
         output_name: Optional[str] = None,
+        dry_run: bool = False,
     ):
         self.parameters: "ConfigParser" = config
         self.nb_process = config.number_of_processes
@@ -520,6 +522,7 @@ class Run:
         self.output_name = (
             output_name if output_name is not None else self.DEFAULT_OUTPUT_MESH_NAME
         )
+        self.dry_run = dry_run
 
     def __str__(self) -> str:
         return f"Run(nb = {self.nb_process}, func =  {self.evaluation_function})"
@@ -553,7 +556,7 @@ class Run:
             cmd = f'precice-aste-evaluate -m {self.parameters.input_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --gradient --log DEBUG'
         else:
             cmd = f'precice-aste-evaluate -m {self.parameters.input_mesh} -f "{self.evaluation_function}" -d "{DEFAULT_DATA_NAME}" -o {self.DEFAULT_INPUT_MESH_NAME} --log DEBUG'
-        self._run_command(cmd)
+        self._run_command(cmd, dry_run=self.dry_run)
 
     def partition(
         self,
@@ -562,22 +565,22 @@ class Run:
     ) -> None:
         cmd_a = f"precice-aste-partition -m {self.DEFAULT_INPUT_MESH_NAME} -n {self.nb_process} -o {mesh_a_name} --dir {mesh_a_name} --algorithm meshfree"
         cmd_b = f"precice-aste-partition -m {self.parameters.output_mesh} -n {self.nb_process} -o {mesh_b_name} --dir {mesh_b_name} --algorithm meshfree"
-        self._run_command_parallel(cmd_a, cmd_b)
+        self._run_command_parallel(cmd_a, cmd_b, dry_run=self.dry_run)
 
     def run(self):
         path_to_mapped = pathlib.Path("mapped/")
         path_to_mapped.mkdir(parents=True, exist_ok=True)
         cmd_a = f'mpirun -n {self.nb_process} precice-aste-run -p A --mesh {self.DEFAULT_MESH_NAME_A}/{self.DEFAULT_MESH_NAME_A} --data "{DEFAULT_DATA_NAME}"'
         cmd_b = f'mpirun -n {self.nb_process} precice-aste-run -p B --mesh {self.DEFAULT_MESH_NAME_B}/{self.DEFAULT_MESH_NAME_B} --output mapped/mapped --data "{DEFAULT_INTERPOLATED_DATA_NAME}"'
-        self._run_command_parallel(cmd_a, cmd_b)
+        self._run_command_parallel(cmd_a, cmd_b, self.dry_run)
 
     def join(self):
         cmd = f"precice-aste-join -m mapped/mapped -o {self.output_name} --recovery {self.DEFAULT_MESH_NAME_B}/{self.DEFAULT_MESH_NAME_B}_recovery.json"
-        self._run_command(cmd)
+        self._run_command(cmd, self.dry_run)
 
     def stats(self):
         cmd = f'precice-aste-evaluate -m {self.output_name} -f "{self.evaluation_function}" -d "Error" --diffdata "{DEFAULT_INTERPOLATED_DATA_NAME}" --diff --stats --log DEBUG'
-        self._run_command(cmd)
+        self._run_command(cmd, self.dry_run)
 
     def _vtu_to_csv(self, path_to_file: pathlib.Path, data: str, path_to_output: str):
         reader = vtk.vtkXMLUnstructuredGridReader()  # type: ignore
@@ -788,7 +791,7 @@ def main(folder_name: str = "results") -> None:
         ], "Unsupported function for blade with gradient computation."
     xmleditor = XMLEditor(configuration)
     xmleditor.write()
-    run = Run(configuration, enable_gradient=do_gradient, output_name="result.vtu")
+    run = Run(configuration, enable_gradient=do_gradient, output_name="result.vtu", dry_run=False)
     run.evaluate()
     run.partition()
     run.run()
@@ -1009,9 +1012,40 @@ def batch(function):
                 continue
 
 if __name__ == "__main__":
-    # main(folder_name="RBFC2_256_rastrigin_mod")
-    batch(rastrigin_mod)
-    print("Run completed successfully.")
-    errors = read_errors(PATH_TO_OUT, rastrigin_mod)
-    # print(errors)
-    plot_errors(errors, rastrigin_mod)
+    main(folder_name="RBFC2_256_rastrigin_mod")
+    # pattern = "test*"
+    # shape_parameter_range = np.arange(0.001, 0.1, 0.01)
+    # results = []
+    # path_to_folder = pathlib.Path("test_rastrigin_mod")
+    # for shape_parameter in shape_parameter_range:
+    #     main(folder_name="test_rastrigin_mod")
+    #     # Read stats.json file
+    #     with open(PATH_TO_OUT / path_to_folder / "stats.json", "r") as f:
+    #         data = json.load(f)
+    #     # Extract the values
+    #     rmse = data["relative-l2"]
+    #     linfty = data["abs_max"]
+    #     results.append([shape_parameter, rmse, linfty])
+    # # Save results to a CSV file
+    # results_df = pd.DataFrame(results, columns=["Shape Parameter", "RMSE", "L_infty"])
+    # results_df.to_csv("shape_parameter_results.csv", index=False)
+
+    # plt.plot(
+    #     results_df["Shape Parameter"],
+    #     results_df["L_infty"],
+    #     marker="o",
+    #     label="L_infty Error",
+    # )
+    # plt.plot(
+    #     results_df["Shape Parameter"],
+    #     results_df["RMSE"],
+    #     marker="s",
+    #     label="RMSE",
+    # )
+    # plt.xlabel("Shape Parameter")
+    # plt.ylabel("Error")
+    # plt.title("Error vs Shape Parameter")
+    # plt.legend()
+    # plt.grid()
+    # plt.savefig("shape_parameter_analysis.png", dpi=300, bbox_inches="tight")
+    # plt.close()

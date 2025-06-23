@@ -1,0 +1,7 @@
+precice-aste-evaluate -m meshes/fluid_nodes_fastest_128.vtu -f "(((10*(x-0.5))^2-10*cos(2*3.14159*10*(x-0.5)))+((10*(y-0.0))^2-10*cos(2*3.14159*10*(y-0.0)))+((10*(z-0.5))^2-10*cos(2*3.14159*10*(z-0.5)))-(10*(x-0.5))*(10*(z-0.5))--28.9988732674367)/(70.60362859069889--28.9988732674367)+1" -d "InputData" -o input_mesh.vtu --log DEBUG
+precice-aste-partition -m input_mesh.vtu -n 4 -o a_mesh --dir a_mesh --algorithm meshfree
+precice-aste-partition -m meshes/fluid_centers_fastest_64.vtu -n 4 -o b_mesh --dir b_mesh --algorithm meshfree
+mpirun -n 4 precice-aste-run -p A --mesh a_mesh/a_mesh --data "InputData"
+mpirun -n 4 precice-aste-run -p B --mesh b_mesh/b_mesh --output mapped/mapped --data "InterpolatedData"
+precice-aste-join -m mapped/mapped -o result.vtu --recovery b_mesh/b_mesh_recovery.json
+precice-aste-evaluate -m result.vtu -f "(((10*(x-0.5))^2-10*cos(2*3.14159*10*(x-0.5)))+((10*(y-0.0))^2-10*cos(2*3.14159*10*(y-0.0)))+((10*(z-0.5))^2-10*cos(2*3.14159*10*(z-0.5)))-(10*(x-0.5))*(10*(z-0.5))--28.9988732674367)/(70.60362859069889--28.9988732674367)+1" -d "Error" --diffdata "InterpolatedData" --diff --stats --log DEBUG
