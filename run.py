@@ -791,7 +791,12 @@ def main(folder_name: str = "results") -> None:
         ], "Unsupported function for blade with gradient computation."
     xmleditor = XMLEditor(configuration)
     xmleditor.write()
-    run = Run(configuration, enable_gradient=do_gradient, output_name="result.vtu", dry_run=False)
+    run = Run(
+        configuration,
+        enable_gradient=do_gradient,
+        output_name="result.vtu",
+        dry_run=False,
+    )
     run.evaluate()
     run.partition()
     run.run()
@@ -810,6 +815,7 @@ def main(folder_name: str = "results") -> None:
             path_to_file=PATH_TO_OUT / folder_name / "result.png",
         )
     return None
+
 
 def read_csv(path_to_csv: pathlib.Path):
     x, y, z, interpolated_data = np.loadtxt(
@@ -945,6 +951,7 @@ def plot_errors(errors: dict, function):
     plt.savefig(f"error_analysis_{function.__name__}.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+
 def batch(function):
     available_mapping_methods = {
         # "nearest-neighbor": "NN",
@@ -963,12 +970,8 @@ def batch(function):
         # "rbf/thin-plate-splines": "RBFTPS",
     }
     mesh_sizes = ["32", "64", "128", "256"]
-    input_meshes = [
-        f"fluid_nodes_fastest_{size}.vtu" for size in mesh_sizes
-    ]
-    output_meshes = [
-        f"fluid_centers_fastest_{size}.vtu" for size in mesh_sizes
-    ]
+    input_meshes = [f"fluid_nodes_fastest_{size}.vtu" for size in mesh_sizes]
+    output_meshes = [f"fluid_centers_fastest_{size}.vtu" for size in mesh_sizes]
     support_radius = [0.30, 0.15, 0.07, 0.04]
     for mapping_method, short_name in available_mapping_methods.items():
         for i in range(len(input_meshes)):
@@ -1006,46 +1009,55 @@ def batch(function):
                 json.dump(config_data, f, indent=2)
             # Run the main function with the generated config file
             try:
-                main(folder_name=f"{short_name}_{output_mesh.split('.')[0].split('_')[-1]}_{function.__name__}")
+                main(
+                    folder_name=f"{short_name}_{output_mesh.split('.')[0].split('_')[-1]}_{function.__name__}"
+                )
             except Exception as e:
                 print(f"Error occurred for {short_name} with mesh {output_mesh}: {e}")
                 continue
 
-if __name__ == "__main__":
-    main(folder_name="RBFC2_256_rastrigin_mod")
-    # pattern = "test*"
-    # shape_parameter_range = np.arange(0.001, 0.1, 0.01)
-    # results = []
-    # path_to_folder = pathlib.Path("test_rastrigin_mod")
-    # for shape_parameter in shape_parameter_range:
-    #     main(folder_name="test_rastrigin_mod")
-    #     # Read stats.json file
-    #     with open(PATH_TO_OUT / path_to_folder / "stats.json", "r") as f:
-    #         data = json.load(f)
-    #     # Extract the values
-    #     rmse = data["relative-l2"]
-    #     linfty = data["abs_max"]
-    #     results.append([shape_parameter, rmse, linfty])
-    # # Save results to a CSV file
-    # results_df = pd.DataFrame(results, columns=["Shape Parameter", "RMSE", "L_infty"])
-    # results_df.to_csv("shape_parameter_results.csv", index=False)
 
-    # plt.plot(
-    #     results_df["Shape Parameter"],
-    #     results_df["L_infty"],
-    #     marker="o",
-    #     label="L_infty Error",
-    # )
-    # plt.plot(
-    #     results_df["Shape Parameter"],
-    #     results_df["RMSE"],
-    #     marker="s",
-    #     label="RMSE",
-    # )
-    # plt.xlabel("Shape Parameter")
-    # plt.ylabel("Error")
-    # plt.title("Error vs Shape Parameter")
-    # plt.legend()
-    # plt.grid()
-    # plt.savefig("shape_parameter_analysis.png", dpi=300, bbox_inches="tight")
-    # plt.close()
+if __name__ == "__main__":
+    # main(folder_name="RBFC2_256_rastrigin_mod")
+    pattern = "test*"
+    shape_parameter_range = np.arange(0.001, 0.1, 0.01)
+    results = []
+    path_to_folder = pathlib.Path("test_rastrigin_mod")
+    for shape_parameter in shape_parameter_range:
+        main(folder_name="test_rastrigin_mod")
+        # Read stats.json file
+        # with open(PATH_TO_OUT / path_to_folder / "stats.json", "r") as f:
+        #     data = json.load(f)
+        # # Extract the values
+        # rmse = data["relative-l2"]
+        # linfty = data["abs_max"]
+        # results.append([shape_parameter, rmse, linfty])
+
+        # Compute errors without borders
+        rmse, linfty = compute_errors_without_borders(
+            PATH_TO_OUT / path_to_folder / "output.csv", rastrigin_mod
+        )
+        results.append([shape_parameter, rmse, linfty])
+    # Save results to a CSV file
+    results_df = pd.DataFrame(results, columns=["Shape Parameter", "RMSE", "L_infty"])
+    results_df.to_csv("shape_parameter_results.csv", index=False)
+
+    plt.plot(
+        results_df["Shape Parameter"],
+        results_df["L_infty"],
+        marker="o",
+        label="L_infty Error",
+    )
+    plt.plot(
+        results_df["Shape Parameter"],
+        results_df["RMSE"],
+        marker="s",
+        label="RMSE",
+    )
+    plt.xlabel("Shape Parameter")
+    plt.ylabel("Error")
+    plt.title("Error vs Shape Parameter")
+    plt.legend()
+    plt.grid()
+    plt.savefig("shape_parameter_analysis.png", dpi=300, bbox_inches="tight")
+    plt.close()
