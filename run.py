@@ -4,6 +4,7 @@ import subprocess
 import shutil
 import json
 from typing import Optional
+from time import sleep
 
 ## Third-party librairies
 # * pip install -r requirements.txt
@@ -826,7 +827,7 @@ def read_csv(path_to_csv: pathlib.Path):
 
 def compute_errors_without_borders(
     path_to_csv: pathlib.Path, function
-) -> tuple[float, float]:
+) -> tuple[float, float, float]:
     x_out, y_out, z_out, values_out = read_csv(path_to_csv)
     # Compute the function values at the points
     minimum, maximum = find_min_max(function, generate_grid(Process.SIZE))
@@ -859,7 +860,8 @@ def compute_errors_without_borders(
     # Compute the error
     linfty_global = np.max(np.abs(values_out - predicted))
     rmse = np.sqrt(1 / n * np.sum((values_out - predicted) ** 2))
-    return rmse, linfty_global
+    median_error = np.median(np.abs(values_out - predicted))
+    return float(rmse), float(linfty_global), float(median_error)
 
 
 def compute_errors(path_to_dir: pathlib.Path, function):
@@ -871,14 +873,14 @@ def compute_errors(path_to_dir: pathlib.Path, function):
             case_name = name.split("_")[0]
             csv_file = subdir / "output.csv"
             assert csv_file.exists(), f"CSV file not found in {subdir}"
-            rmse, linfty = compute_errors_without_borders(csv_file, function)
-            print(
-                f"Case: {case_name}, Mesh Size: {name.split('_')[1]}, RMSE: {rmse}, Linfty: {linfty}"
-            )
+            rmse, linfty, median_error = compute_errors_without_borders(csv_file, function)
+            # print(
+            #     f"Case: {case_name}, Mesh Size: {name.split('_')[1]}, RMSE: {rmse}, Linfty: {linfty}"
+            # )
             mesh_size = name.split("_")[1]
             if case_name not in errors:
                 errors[case_name] = []
-            errors[case_name].append([mesh_size, rmse, linfty])
+            errors[case_name].append([mesh_size, rmse, linfty, median_error])
     return errors
 
 
@@ -1018,28 +1020,45 @@ def batch(function):
 
 
 if __name__ == "__main__":
-    # main(folder_name="RBFC2_256_rastrigin_mod")
+    # main(folder_name="test_rastrigin_mod")
     pattern = "test*"
-    shape_parameter_range = np.arange(0.001, 0.1, 0.01)
+    shape_parameter_range = np.arange(0.01, 1.0, 0.01)
     results = []
     path_to_folder = pathlib.Path("test_rastrigin_mod")
     for shape_parameter in shape_parameter_range:
-        main(folder_name="test_rastrigin_mod")
-        # Read stats.json file
-        # with open(PATH_TO_OUT / path_to_folder / "stats.json", "r") as f:
-        #     data = json.load(f)
-        # # Extract the values
-        # rmse = data["relative-l2"]
-        # linfty = data["abs_max"]
-        # results.append([shape_parameter, rmse, linfty])
+        with open("config.json", "r") as f:
+            config_data = json.load(f)
+        config_data["additional-config"]["shape-parameter"] = shape_parameter
+        with open("config.json", "w") as f:
+            json.dump(config_data, f, indent=2)
+        try:
+            main(folder_name="test_rastrigin_mod")
+            # # Read stats.json file
+            # sleep(3)
+            # with open(PATH_TO_OUT / path_to_folder / "stats.json", "r") as f:
+            #     data = json.load(f)
+            # # Extract the values
+            # rmse = data["relative-l2"]
+            # linfty = data["abs_max"]
+            # # copy in directory out
+            # shutil.copy(
+            #     PATH_TO_OUT / path_to_folder / "stats.json",
+            #     PATH_TO_OUT / f"stats_{shape_parameter}.json",
+            # )
+            # results.append([shape_parameter, rmse, linfty])
 
-        # Compute errors without borders
-        rmse, linfty = compute_errors_without_borders(
-            PATH_TO_OUT / path_to_folder / "output.csv", rastrigin_mod
-        )
-        results.append([shape_parameter, rmse, linfty])
+            # Compute errors without borders
+            rmse, linfty, median_error = compute_errors_without_borders(
+                PATH_TO_OUT / path_to_folder / "output.csv", rastrigin_mod
+            )
+            
+            results.append([shape_parameter, rmse, linfty, median_error])
+        except Exception as e:
+            print(f"Error occurred for shape parameter {shape_parameter}: {e}")
+            results.append([shape_parameter, -1, -1])
+            break
     # Save results to a CSV file
-    results_df = pd.DataFrame(results, columns=["Shape Parameter", "RMSE", "L_infty"])
+    results_df = pd.DataFrame(results, columns=["Shape Parameter", "RMSE", "L_infty", "Median Error"])
     results_df.to_csv("shape_parameter_results.csv", index=False)
 
     plt.plot(
@@ -1054,8 +1073,15 @@ if __name__ == "__main__":
         marker="s",
         label="RMSE",
     )
+    plt.plot(
+        results_df["Shape Parameter"],
+        results_df["Median Error"],
+        marker="^",
+        label="L_infty / RMSE",
+    )
     plt.xlabel("Shape Parameter")
     plt.ylabel("Error")
+    plt.yscale("log")
     plt.title("Error vs Shape Parameter")
     plt.legend()
     plt.grid()

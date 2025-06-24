@@ -30,3 +30,6 @@ test/
 __pycache__/
 *.pyc
 *.xml
+cfd-data/
+*.csv
+*.out
