@@ -13,12 +13,15 @@ batch:
 optim:
 	$(PYTHON) optim.py
 
+process:
+	$(PYTHON) process.py
+
 optim_gpu: obj/optim.o
-    nvcc obj/optim.o -o bin/optim_gpu
+	nvcc obj/optim.o -o bin/optim_gpu
 
 obj/optim.o: optim.cu
-    mkdir -p obj
-    nvcc -c optim.cu -o obj/optim.o
+	mkdir -p obj
+	nvcc -c optim.cu -o obj/optim.o
 
 test:
 	$(PYTHON) test.py

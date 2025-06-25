@@ -33,3 +33,5 @@ __pycache__/
 cfd-data/
 *.csv
 *.out
+bin/
+obj/

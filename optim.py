@@ -21,6 +21,7 @@ p = 1 / 2.54  # Conversion factor from inches to centimeters
 ### TEST FUNCTIONS ###
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
 def ackley(x: tuple) -> float:
     """
     This function computes Ackley's test function with centering and rescaling.
@@ -47,6 +48,7 @@ def ackley(x: tuple) -> float:
         + np.exp(1)
         + 20
     )
+
 
 def eggholder(x: tuple) -> float:
     """
@@ -487,7 +489,7 @@ def optimize_shape_parameter(
     def cost_function(shape_param: float):
         # Removed print for performance
         fname = function.__name__
-        shape2 = shape_param ** 2  # Precompute for reuse
+        shape2 = shape_param**2  # Precompute for reuse
 
         # Use efficient NumPy operations
         if fname == "gaussian":
@@ -500,7 +502,7 @@ def optimize_shape_parameter(
             raise ValueError("Function not supported for shape parameter optimization.")
 
         invA = np.linalg.pinv(A)
-        Akk = np.einsum('ii->i', invA)  # Efficient diagonal extraction
+        Akk = np.einsum("ii->i", invA)  # Efficient diagonal extraction
         # Akk = np.diag(invA)
         # Use np.divide for safe element-wise division
         error_vector = np.divide(invA @ f, Akk, out=np.zeros_like(f), where=Akk != 0)
@@ -656,6 +658,7 @@ def empirical_shape_parameter(
 #         optimal_shape_param = results[np.argmin(results[:, 1]), 0]
 #     return optimal_shape_param, results
 
+
 def optimize_shape_parameter_with_polynomial_term(
     function: Callable[..., np.float32],
     test_function: Callable[..., float] | np.ndarray,
@@ -672,9 +675,11 @@ def optimize_shape_parameter_with_polynomial_term(
     P = np.ones((len(grid), 1 + grid.shape[1]))
     P[:, 1:] = grid  # Add the coordinates
     beta_init = np.zeros(1 + grid.shape[1])
+
     # Determine the polynomial weights
     def objective(beta: np.ndarray) -> np.float32:
         return np.float32(np.linalg.norm(P @ beta - f))
+
     # Minimize the objective function
     result = minimize(objective, beta_init, method="L-BFGS-B")
     if not result.success:
@@ -711,6 +716,7 @@ def optimize_shape_parameter_with_polynomial_term(
                 error_vector[k] += lambda_[i] * rbf_value
             error_vector[k] += polynomial_term[k]
         return np.sum(np.abs((error_vector - f)))
+
     if use_shgo:
         results = []
         res = shgo(
@@ -732,8 +738,6 @@ def optimize_shape_parameter_with_polynomial_term(
         results = np.array(results)
         optimal_shape_param = results[np.argmin(results[:, 1]), 0]
     return optimal_shape_param, results
-    
-    
 
 
 if __name__ == "__main__":

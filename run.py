@@ -873,7 +873,9 @@ def compute_errors(path_to_dir: pathlib.Path, function):
             case_name = name.split("_")[0]
             csv_file = subdir / "output.csv"
             assert csv_file.exists(), f"CSV file not found in {subdir}"
-            rmse, linfty, median_error = compute_errors_without_borders(csv_file, function)
+            rmse, linfty, median_error = compute_errors_without_borders(
+                csv_file, function
+            )
             # print(
             #     f"Case: {case_name}, Mesh Size: {name.split('_')[1]}, RMSE: {rmse}, Linfty: {linfty}"
             # )
@@ -1021,69 +1023,110 @@ def batch(function):
 
 if __name__ == "__main__":
     # main(folder_name="test_rastrigin_mod")
-    pattern = "test*"
-    shape_parameter_range = np.arange(0.01, 1.0, 0.01)
-    results = []
-    path_to_folder = pathlib.Path("test_rastrigin_mod")
-    for shape_parameter in shape_parameter_range:
-        with open("config.json", "r") as f:
-            config_data = json.load(f)
-        config_data["additional-config"]["shape-parameter"] = shape_parameter
-        with open("config.json", "w") as f:
-            json.dump(config_data, f, indent=2)
-        try:
-            main(folder_name="test_rastrigin_mod")
-            # # Read stats.json file
-            # sleep(3)
-            # with open(PATH_TO_OUT / path_to_folder / "stats.json", "r") as f:
-            #     data = json.load(f)
-            # # Extract the values
-            # rmse = data["relative-l2"]
-            # linfty = data["abs_max"]
-            # # copy in directory out
-            # shutil.copy(
-            #     PATH_TO_OUT / path_to_folder / "stats.json",
-            #     PATH_TO_OUT / f"stats_{shape_parameter}.json",
-            # )
-            # results.append([shape_parameter, rmse, linfty])
-
-            # Compute errors without borders
-            rmse, linfty, median_error = compute_errors_without_borders(
-                PATH_TO_OUT / path_to_folder / "output.csv", rastrigin_mod
-            )
-            
-            results.append([shape_parameter, rmse, linfty, median_error])
-        except Exception as e:
-            print(f"Error occurred for shape parameter {shape_parameter}: {e}")
-            results.append([shape_parameter, -1, -1])
-            break
+    folder_name = "test"
+    input_mesh = "0_0005.vtk"
+    mapping_methods = [
+        "nearest-neighbor",
+        "nearest-projection",
+        "nearest-neighbor-gradient",
+        "rbf/compact-polynomial-c0",
+        "rbf/compact-polynomial-c2",
+        "rbf/compact-polynomial-c4",
+        "rbf/compact-polynomial-c6",
+        "rbf/compact-polynomial-c8",
+        "rbf/compact-tps-c2",
+        "rbf/multiquadrics",
+        "rbf/inverse-multiquadrics",
+        "rbf/gaussian",
+        "rbf/volume-splines",
+        "rbf/thin-plate-splines"
+    ]
+    output_meshes = list(PATH_TO_MESHES.glob("*.vtk"))
+    # output_meshes = [
+    #     "0_01.vtk",
+    #     "0_001.vtk",
+    #     "0_004.vtk",
+    #     "0_009.vtk",
+    #     "0_0007.vtk"
+    # ]
+    nb_vertex = 10
+    config_data = {
+        "input-mesh": str(input_mesh),
+        "output-mesh": None,
+        "test-function": "rastrigin_mod",
+        "mapping-method": None,
+        "additional-config": {
+            "basis-function": None,
+            "support-radius": None,
+            "shape-parameter": None,
+        },
+        "nb-procs": 8,
+    }
+    safety_coef = 3 / 5
+    results = {f"{method}": [] for method in mapping_methods}
+    for method in mapping_methods:
+        config_data["mapping-method"] = "rbf-pum-direct" if "rbf" in method else method
+        for mesh in output_meshes:
+            h = float(str(mesh.name).split(".")[0].replace("_","."))
+            if "rbf" in method and method.split("/")[1] not in ["gaussian"]:
+                config_data["additional-config"]["basis-function"] = method.split("/")[1]
+                config_data["additional-config"]["support-radius"] = nb_vertex * h * safety_coef
+                config_data["additional-config"]["shape-parameter"] = nb_vertex * h * safety_coef
+            elif "rbf" in method and method.split("/")[1] in ["gaussian"]:
+                config_data["additional-config"]["basis-function"] = method.split("/")[1]
+                config_data["additional-config"]["support-radius"] = np.nan
+                config_data["additional-config"]["shape-parameter"] = nb_vertex * h * safety_coef
+            else:
+                config_data["additional-config"]["basis-function"] = None
+                config_data["additional-config"]["support-radius"] = nb_vertex * h * safety_coef
+                config_data["additional-config"]["shape-parameter"] = nb_vertex * h * safety_coef
+            # get file name with extension
+            config_data["output-mesh"] = str(mesh.name)
+            config_file = pathlib.Path(f"config.json")
+            with open(config_file, "w") as f:
+                json.dump(config_data, f, indent=2)
+            try:
+                main(folder_name=folder_name)
+                # open stats.json
+                with open(
+                    PATH_TO_OUT / folder_name / "stats.json", "r"
+                ) as f:
+                    data = json.load(f)
+                rmse = data["relative-l2"]
+                linfty = data["abs_max"]
+                results[method].append((h, rmse, linfty))
+            except Exception as e:
+                print(
+                    f"Error occurred for {method} with mesh {mesh}: {e}. Skipping this case."
+                )
+                results[method].append((h, -1, -1))
+                continue
     # Save results to a CSV file
-    results_df = pd.DataFrame(results, columns=["Shape Parameter", "RMSE", "L_infty", "Median Error"])
-    results_df.to_csv("shape_parameter_results.csv", index=False)
-
-    plt.plot(
-        results_df["Shape Parameter"],
-        results_df["L_infty"],
-        marker="o",
-        label="L_infty Error",
-    )
-    plt.plot(
-        results_df["Shape Parameter"],
-        results_df["RMSE"],
-        marker="s",
-        label="RMSE",
-    )
-    plt.plot(
-        results_df["Shape Parameter"],
-        results_df["Median Error"],
-        marker="^",
-        label="L_infty / RMSE",
-    )
-    plt.xlabel("Shape Parameter")
-    plt.ylabel("Error")
-    plt.yscale("log")
-    plt.title("Error vs Shape Parameter")
-    plt.legend()
-    plt.grid()
-    plt.savefig("shape_parameter_analysis.png", dpi=300, bbox_inches="tight")
-    plt.close()
+    results_file = "results.csv"
+    with open(results_file, "w") as f:
+        f.write("Method,Mesh Size,RMSE,L_infty\n")
+        for method, values in results.items():
+            for h, rmse, linfty in values:
+                f.write(f"{method},{h},{rmse},{linfty}\n")
+    # with open("results.csv", "r") as f:
+    #     lines = f.readlines()
+    # results = {}
+    # for line in lines[1:]:
+    #     method, h, rmse, linfty = line.strip().split(",")
+    #     if method not in results:
+    #         results[method] = []
+    #     results[method].append((float(h), float(rmse), float(linfty)))
+    # # Plot the errors
+    # for method, values in results.items():
+    #     sizes = [v[0] for v in values]
+    #     rmses = [v[1] for v in values]
+    #     linfties = [v[2] for v in values]
+    #     # Remove all occurrences of -1
+    #     sizes = [s for s, r in zip(sizes, rmses) if r != -1]
+    #     rmses = [r for r in rmses if r != -1]
+    #     linfties = [l for l in linfties if l != -1]
+    #     plt.scatter(sizes, rmses, label=f"{method} RMSE")
+    #     # plt.plot(sizes, linfties, label=f"{method} Linfty", linestyle="--")
+    # plt.xscale("log")
+    # plt.yscale("log")
+    # plt.savefig("error_analysis.png", dpi=300, bbox_inches="tight")
