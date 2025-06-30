@@ -1022,7 +1022,7 @@ def batch(function):
 
 
 if __name__ == "__main__":
-    # main(folder_name="test_rastrigin_mod")
+    main(folder_name="test_rastrigin_mod")
     folder_name = "test"
     input_mesh = "0_0005.vtk"
     mapping_methods = [
@@ -1062,7 +1062,7 @@ if __name__ == "__main__":
         },
         "nb-procs": 8,
     }
-    safety_coef = 3 / 5
+    safety_coef = 0.6
     results = {f"{method}": [] for method in mapping_methods}
     for method in mapping_methods:
         config_data["mapping-method"] = "rbf-pum-direct" if "rbf" in method else method

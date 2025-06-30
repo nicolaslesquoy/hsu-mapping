@@ -35,3 +35,4 @@ cfd-data/
 *.out
 bin/
 obj/
+.vscode/
